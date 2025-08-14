@@ -7,7 +7,9 @@ from modules.features import FeaturesModule
 from modules.detection import DetectionModule
 from modules.optimizer import OptimizerModule
 from modules.devices import DevicesModule
+
 from modules.scanner import ScannerModule
+from modules.devices_sniffer_module import DevicesSnifferModule
 
 import os
 
@@ -36,6 +38,7 @@ class Orchestrator:
 			DetectionModule(),
 			OptimizerModule(),
 			DevicesModule(),
+			DevicesSnifferModule(),  # Nasłuch ARP/IP i eventy DEVICE_DETECTED
 			ScannerModule(),
 		]
 		for module in self.modules:

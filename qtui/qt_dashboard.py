@@ -169,36 +169,12 @@ class DashboardTab(QWidget):
                 self.log_status(f"Ustawiono interfejs: {iface}")
             except Exception as e:
                 self.log_status(f"Błąd ustawiania interfejsu: {e}")
-        self.pause_btn = QPushButton("Pauza")
-        self.stop_btn = QPushButton("Stop")
-        for btn, color, pressed in [
-            (self.start_btn, '#4CAF50', '#087f23'),
-            (self.pause_btn, '#FFC107', '#b28704'),
-            (self.stop_btn, '#F44336', '#b71c1c')]:
-            btn.setFixedWidth(100)
-            btn.setStyleSheet(f"""
-                QPushButton {{
-                    font-weight: bold; background: {color}; color: white; border-radius: 8px; padding: 8px 0px; font-size: 14px;
-                }}
-                QPushButton:pressed {{
-                    background: {pressed};
-                    border: 2px inset {pressed};
-                }}
-            """)
-        self.start_btn.clicked.connect(self._on_start_sniffing)
-        self.pause_btn.clicked.connect(self._on_pause_sniffing)
-        self.stop_btn.clicked.connect(self._on_stop_sniffing)
-
-        # Inicjalizacja backendu/orchestratora
-        self._sniffing = False
-        self._orchestrator = None
-        self._packet_counter = 0
-
-        # Timer do cyklicznego pobierania pakietów
-        from PyQt5.QtCore import QTimer
-        self._event_timer = QTimer(self)
-        self._event_timer.timeout.connect(self._process_new_packets)
-        self._event_timer.start(100)
+        # Przekaż zmianę interfejsu do DevicesSnifferModule przez orchestrator
+        main_window = self.parentWidget().parentWidget() if hasattr(self, 'parentWidget') else None
+        if main_window and hasattr(main_window, '_orchestrator'):
+            for m in main_window._orchestrator.modules:
+                if m.__class__.__name__ == 'DevicesSnifferModule':
+                    m.set_interface(iface)
 
 
     def _init_db(self):
@@ -601,19 +577,53 @@ class MainWindow(QMainWindow):
         self.setWindowFlag(Qt.Window)
         self.setWindowState(Qt.WindowActive)
 
+
     def initialize_orchestrator(self):
-        self._selected_iface = self.dashboard.iface_combo.currentText()
-        self._event_queue = queue.Queue()
-        self._orchestrator_thread = threading.Thread(target=self._run_orchestrator, daemon=True)
-        self._orchestrator_thread.start()
-        # Timer do odbioru eventów z kolejki co 100ms
-        self._event_timer = QTimer()
-        self._event_timer.timeout.connect(self._process_events)
-        self._event_timer.start(100)
-        # Stan sniffingu
-        self._sniffing = False
+        self._selected_iface = self.dashboard.interface_combo.currentText()
+        from core.orchestrator import Orchestrator
+        self._orchestrator = Orchestrator()
+        self._orchestrator.initialize()
+        # Ustaw interfejs na start
+        for m in self._orchestrator.modules:
+            if hasattr(m, 'set_interface'):
+                m.set_interface(self._selected_iface)
+        self._sniffing = True
         self._paused = False
         self._packet_counter = 0
+        self._ai_weights = {}
+        self._event_timer = QTimer()
+        self._event_timer.timeout.connect(self._process_all_events)
+        self._event_timer.start(200)
+
+    def _process_all_events(self):
+        # Pobierz eventy z generate_event() wszystkich modułów orchestratora
+        for m in self._orchestrator.modules:
+            event = m.generate_event() if hasattr(m, 'generate_event') else None
+            if not event:
+                continue
+            if event.type == "NEW_PACKET":
+                pkt_bytes = event.data.get("raw_bytes")
+                if pkt_bytes:
+                    src_ip = event.data.get('src_ip', '-')
+                    ai_weight = self._ai_weights.get(src_ip, '-')
+                    meta = dict(event.data)
+                    meta['ai_weight'] = ai_weight
+                    self._packet_counter += 1
+                    self.dashboard._add_packet(self._packet_counter, pkt_bytes, meta)
+            elif event.type == "NEW_THREAT":
+                src_ip = event.data.get('ip', '-')
+                ai_weight = event.data.get('ai_weight', '-')
+                self._ai_weights[src_ip] = ai_weight
+            elif event.type == "DEVICE_DETECTED":
+                ip = event.data.get('ip', '-')
+                device_info = {
+                    'ip': ip,
+                    'mac': event.data.get('mac', '-') if 'mac' in event.data else '-',
+                    'last_seen': event.data.get('last_seen', '-') if 'last_seen' in event.data else '-',
+                    'packets': event.data.get('packets', 1),
+                    'status': event.data.get('status', 'online'),
+                }
+                self.devices.update_device(device_info)
 
     def _run_orchestrator(self):
         # Import lokalny, by nie blokować GUI
