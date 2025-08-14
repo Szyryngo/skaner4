@@ -13,7 +13,7 @@ Jest to modularny, rozszerzalny system do:
 
 ## 🛠 Technologia
 - **Python** 3.11+
-- **Sniffing**: scapy, pyshark
+- **Sniffing**: scapy (w późniejszym etapie pyshark jako plugin)
 - **AI/ML**: scikit-learn, numpy, pandas
 - **UI**: Flask (multi-tab dashboard)
 - **System / Config**: psutil, platform, yaml
