@@ -45,12 +45,8 @@ Opis wszystkich modułów, ich interfejsów i przeznaczenia.
   - Analiza zasobów komputera (CPU, RAM, OS).
   - Dobór trybu low/high performance.
   - Tworzy event `CONFIG_UPDATED`.
-- **ui.py** – 
-  - Interfejs webowy (Flask) z zakładkami:
-    - Dashboard (alerty).
-    - Live Devices.
-    - Network Scanner.
-    - Configuration.
+-- **qtui/qt_dashboard.py** –
+  - Natywny GUI PyQt5 (dashboard, zakładki: alerty, urządzenia, skaner, konfiguracja).
 
 ---
 
@@ -74,7 +70,7 @@ Opis wszystkich modułów, ich interfejsów i przeznaczenia.
 1. `capture.py` → `NEW_PACKET`
 2. `features.py` → `NEW_FEATURES` (na podstawie NEW_PACKET)
 3. `detection.py` → `NEW_THREAT` (jeśli zagrożenie)
-4. `ui.py` → wyświetlenie alertu
+4. `qt_dashboard.py` → wyświetlenie alertu
 5. dodatkowe moduły/pluginy mogą reagować na dowolnym etapie
 
 ---

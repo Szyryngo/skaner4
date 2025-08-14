@@ -15,7 +15,7 @@ Jest to modularny, rozszerzalny system do:
 - **Python** 3.11+
 - **Sniffing**: scapy (w późniejszym etapie pyshark jako plugin)
 - **AI/ML**: scikit-learn, numpy, pandas
-- **UI**: Flask (multi-tab dashboard)
+- **UI**: PyQt5 (natywny GUI, multi-tab dashboard)
 - **System / Config**: psutil, platform, yaml
 
 ---
@@ -55,8 +55,9 @@ Jest to modularny, rozszerzalny system do:
 ```
 ai-network-analyzer/
 ├── core/               # logika główna, ładowanie modułów i pluginów, system eventów
-├── modules/            # główne funkcje: sniffing, features, detection, scanner, devices, optimizer, ui
+├── modules/            # główne funkcje: sniffing, features, detection, scanner, devices, optimizer
 ├── plugins/            # dodatkowe funkcje użytkownika
+├── qtui/               # natywny GUI PyQt5 (qt_dashboard.py)
 ├── config/             # pliki konfiguracyjne
 ├── data/               # modele AI, blacklisty
 ├── tests/              # testy jednostkowe
@@ -70,6 +71,7 @@ ai-network-analyzer/
 pip install -r requirements.txt
 python main.py
 ```
+Program domyślnie uruchamia natywny GUI PyQt5 (main.py → qtui/qt_dashboard.py).
 
 ---
 

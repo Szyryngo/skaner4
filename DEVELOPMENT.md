@@ -46,8 +46,9 @@ Zawiera opis wszystkich modułów i kroków, jakie trzeba wykonać.
 - Ustawia tryb pracy (low/high perf).
 - Publikuje `CONFIG_UPDATED`.
 
-### **modules/ui.py**
-- Flask UI – dashboard (alerty, skaner, urządzenia, konfiguracja).
+
+### **qtui/qt_dashboard.py**
+- Natywny GUI PyQt5 – dashboard, zakładki (alerty, urządzenia, skaner, konfiguracja).
 
 ---
 
@@ -87,7 +88,7 @@ Event("TYPE", {"key": value})
 5. modules/optimizer.py
 6. modules/devices.py
 7. modules/scanner.py
-8. modules/ui.py
+8. qtui/qt_dashboard.py
 9. Integracja orchestratora
 10. Plugin testowy (plugins/example_plugin.py)
 

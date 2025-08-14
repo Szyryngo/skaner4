@@ -79,13 +79,15 @@ Każdy punkt jest tak zapisany, aby można było na jego podstawie łatwo popros
 
 ---
 
-### modules/ui.py
-- [ ] Flask UI z zakładkami:
+
+### qtui/qt_dashboard.py
+- [ ] GUI PyQt5 z zakładkami:
   - Dashboard – lista alertów (NEW_THREAT).
   - Live Devices – lista hostów z DEVICE_DETECTED.
   - Network Scanner – przyciski do uruchamiania light/full scan + wyniki SCAN_COMPLETED.
   - Configuration – ustawienia i tryb pracy z CONFIG_UPDATED.
-- [ ] Aktualizacje w czasie rzeczywistym (WebSocket/AJAX).
+- [ ] Dynamiczna aktualizacja widoków na podstawie eventów backendu.
+- [ ] Obsługa akcji użytkownika (np. uruchom skanowanie, wybór interfejsu).
 
 ---
 
