@@ -69,5 +69,6 @@ class Orchestrator:
 					except Exception as e:
 						print(f"Błąd w module/pluginie {obj.__class__.__name__}: {e}")
 
-			# TODO: warunek zakończenia pętli lub sleep
-			break  # Szkielet: kończymy po jednej iteracji
+			# Pętla nieskończona, aby serwer Flask działał cały czas
+			import time
+			time.sleep(1)
