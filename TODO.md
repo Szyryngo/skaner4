@@ -80,14 +80,21 @@ Każdy punkt jest tak zapisany, aby można było na jego podstawie łatwo popros
 ---
 
 
+
 ### qtui/qt_dashboard.py
-- [ ] GUI PyQt5 z zakładkami:
+- [x] GUI PyQt5 z zakładkami:
   - Dashboard – lista alertów (NEW_THREAT).
   - Live Devices – lista hostów z DEVICE_DETECTED.
   - Network Scanner – przyciski do uruchamiania light/full scan + wyniki SCAN_COMPLETED.
   - Configuration – ustawienia i tryb pracy z CONFIG_UPDATED.
-- [ ] Dynamiczna aktualizacja widoków na podstawie eventów backendu.
-- [ ] Obsługa akcji użytkownika (np. uruchom skanowanie, wybór interfejsu).
+- [x] Dynamiczna aktualizacja widoków na podstawie eventów backendu.
+- [x] Obsługa akcji użytkownika (np. uruchom skanowanie, wybór interfejsu).
+- [x] Refaktoryzacja dashboardu: usunięcie powielonych fragmentów, poprawa wcięć, czytelny layout.
+- [x] Dodanie dolnej belki logów (status bar) z informacjami o działaniach użytkownika.
+- [x] Przycisk "Pauza" i "Stop" poprawnie zatrzymują cykliczne pobieranie pakietów.
+- [x] Pakiety wyświetlane są tylko w GUI, nie pojawiają się już w konsoli.
+- [x] QTimer cyklicznie pobiera pakiety do tabeli, gdy sniffing jest aktywny.
+- [x] Czytelny wybór interfejsu sieciowego (QComboBox, testowanie i użycie wybranego interfejsu).
 
 ---
 
