@@ -8,7 +8,6 @@ from modules.detection import DetectionModule
 from modules.optimizer import OptimizerModule
 from modules.devices import DevicesModule
 from modules.scanner import ScannerModule
-from modules.ui import UIModule
 
 import os
 
@@ -38,7 +37,6 @@ class Orchestrator:
 			OptimizerModule(),
 			DevicesModule(),
 			ScannerModule(),
-			UIModule(),
 		]
 		for module in self.modules:
 			module.initialize(config)

@@ -13,14 +13,19 @@ class DevicesModule(ModuleBase):
 		self.devices = {}
 
 	def handle_event(self, event):
-		"""Obsługuje eventy (np. NEW_PACKET do wykrywania urządzeń)."""
+		"""Obsługuje eventy NEW_PACKET do wykrywania urządzeń w sieci."""
 		if event.type == 'NEW_PACKET':
-			# TODO: analiza pakietu i aktualizacja listy urządzeń
-			pass
+			ip = event.data.get('src_ip')
+			if ip and ip not in self.devices:
+				self.devices[ip] = {'last_seen': event.data}
+				self._last_detected = ip
 
 	def generate_event(self):
 		"""
-		Generuje event DEVICE_DETECTED jeśli wykryto nowe urządzenie (szkielet).
+		Generuje event DEVICE_DETECTED jeśli wykryto nowe urządzenie.
 		"""
-		# TODO: implement device detection
+		if hasattr(self, '_last_detected'):
+			ip = self._last_detected
+			del self._last_detected
+			return Event('DEVICE_DETECTED', {'ip': ip})
 		return None

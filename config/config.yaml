@@ -1,6 +1,5 @@
-
-# Przykładowa konfiguracja
-network_interface: eth0
+gui: qt
+network_interface: null
 filter: ''
 ai_model_path: data/models/
 ui_port: 5000

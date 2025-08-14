@@ -10,7 +10,29 @@ class CaptureModule(ModuleBase):
 	def initialize(self, config):
 		"""Inicjalizuje moduł z konfiguracją (np. interfejs sieciowy, filtr)."""
 		self.config = config
-		self.sniffing = False
+		self._last_packet = None
+		self._start_sniffing()
+
+	def _start_sniffing(self):
+		from scapy.all import sniff
+		import threading
+		def pkt_callback(pkt):
+			try:
+				if pkt.haslayer('IP'):
+					ip = pkt['IP']
+					event = {
+						'src_ip': ip.src,
+						'dst_ip': ip.dst,
+						'protocol': pkt.proto if hasattr(pkt, 'proto') else 'N/A',
+						'payload_size': len(pkt)
+					}
+					self._last_packet = event
+			except Exception as e:
+				print(f"[CaptureModule] Błąd przy analizie pakietu: {e}")
+		iface = self.config.get('network_interface', None)
+		flt = self.config.get('filter', '')
+		t = threading.Thread(target=lambda: sniff(prn=pkt_callback, filter=flt, iface=iface, store=0), daemon=True)
+		t.start()
 
 	def handle_event(self, event):
 		"""Nie obsługuje eventów (sniffing jest pasywny)."""
@@ -18,8 +40,10 @@ class CaptureModule(ModuleBase):
 
 	def generate_event(self):
 		"""
-		Przechwytuje pakiet i zwraca event NEW_PACKET (szkielet, bez realnego sniffingu).
-		Wersja docelowa: scapy.sniff lub pyshark.LiveCapture.
+		Zwraca event NEW_PACKET na podstawie przechwyconego pakietu przez scapy.
 		"""
-		# TODO: implement real packet sniffing
+		if self._last_packet:
+			pkt = self._last_packet
+			self._last_packet = None
+			return Event('NEW_PACKET', pkt)
 		return None
