@@ -48,10 +48,15 @@ Zawiera opis wszystkich modułów i kroków, jakie trzeba wykonać.
 - Publikuje `CONFIG_UPDATED`.
 
 
+
 ### **qtui/qt_dashboard.py**
-- Natywny GUI PyQt5 – dashboard, zakładki (alerty, urządzenia, skaner, konfiguracja).
-- Protokół w tabeli pakietów wyświetlany jako czytelna nazwa (TCP/UDP/ICMP).
-- Live Devices aktualizowane automatycznie po wykryciu urządzenia (event DEVICE_DETECTED).
+    - Natywny GUI PyQt5 – dashboard, zakładki (alerty, urządzenia, skaner, konfiguracja).
+    - Oddzielne przyciski i pola wyboru, dolna belka logów, panel szczegółów, pole filtra BPF.
+    - Przechwycone pakiety: tabela z dynamicznym dodawaniem, panel szczegółów, HEX/ASCII.
+    - Każdy pakiet analizowany przez AI, wyświetlana waga (ai_weight), kolorowanie wiersza (zielony/żółty/czerwony).
+    - Protokół w tabeli pakietów wyświetlany jako czytelna nazwa (TCP/UDP/ICMP).
+    - Nowe pakiety pojawiają się na górze tabeli (od najmłodszego).
+    - Live Devices aktualizowane automatycznie po wykryciu urządzenia (event DEVICE_DETECTED).
 
 ---
 

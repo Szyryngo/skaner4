@@ -59,7 +59,12 @@ class CaptureModule(ModuleBase):
 				print(f"[CaptureModule] Błąd przy analizie pakietu: {e}")
 		iface = self.config.get('network_interface', None)
 		flt = self.config.get('filter', '')
-		t = threading.Thread(target=lambda: sniff(prn=pkt_callback, filter=flt, iface=iface, store=0), daemon=True)
+		def sniff_thread():
+			if flt and flt.strip().lower() not in ('', 'nie filtruj', 'none'):
+				sniff(prn=pkt_callback, filter=flt, iface=iface, store=0)
+			else:
+				sniff(prn=pkt_callback, iface=iface, store=0)
+		t = threading.Thread(target=sniff_thread, daemon=True)
 		t.start()
 
 	def handle_event(self, event):
@@ -70,9 +75,10 @@ class CaptureModule(ModuleBase):
 		"""
 		Zwraca event NEW_PACKET na podstawie przechwyconego pakietu przez scapy.
 		"""
+		print(f"[CaptureModule] generate_event: self._last_packet={self._last_packet}")
 		if self._last_packet:
 			pkt = self._last_packet
-			print(f"[CaptureModule] generate_event: {pkt}")
+			print(f"[CaptureModule] generate_event: zwracam event z pkt={pkt}")
 			self._last_packet = None
 			return Event('NEW_PACKET', pkt)
 		return None

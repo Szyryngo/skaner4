@@ -1,63 +1,29 @@
-## 📄 TODO.md
-```markdown
+
 # TODO – AI Network Packet Analyzer Pro
 
-Lista szczegółowych kroków implementacyjnych dla poszczególnych modułów.  
-Każdy punkt jest tak zapisany, aby można było na jego podstawie łatwo poprosić GitHub Copilota o napisanie kodu.
+## Stan na sierpień 2025
+- [x] Dashboard PyQt5: oddzielne przyciski, wybór interfejsu, dolna belka logów, panel szczegółów, pole filtra BPF
+- [x] Przechwytywanie pakietów, dynamiczna tabela, panel szczegółów, HEX/ASCII
+- [x] Integracja orchestratora z GUI, cykliczne pobieranie pakietów (QTimer)
+- [x] AI: każdemu pakietowi przypisywana jest waga (ai_weight), kolorowanie wierszy
+- [x] Wyświetlanie protokołu jako nazwa (TCP/UDP/ICMP)
+- [x] Nowe pakiety pojawiają się na górze tabeli
 
----
+## Najbliższe zadania
+- [ ] Usprawnić przepływ eventów AI (każdy pakiet → cechy → AI → waga)
+- [ ] Rozbudować panel szczegółów o dekodowanie warstw protokołu
+- [ ] Umożliwić eksport przechwyconych pakietów do pliku (np. CSV, PCAP)
+- [ ] Dodać testy jednostkowe dla orchestratora i GUI
+- [ ] Plugin: integracja z pyshark jako alternatywny backend sniffingu
+- [ ] Plugin: automatyczne powiadomienia (np. email, webhook)
+- [ ] Uprościć konfigurację filtrów BPF (lepszy UX)
+- [ ] Dodać tryb dark/light dla GUI
 
-### core/orchestrator.py
-- [ ] Zaimplementować główną pętlę eventów:
-  - Iteruj po module.generate_event()
-  - Wysyłaj eventy do wszystkich modułów przez handle_event()
-- [ ] Obsłużyć kolejkę eventów.
-- [ ] Obsłużyć try/catch dla odporności na awarie modułów.
-- [ ] Rozważyć implementację wersji asynchronicznej (asyncio).
-
----
-
-### modules/capture.py
-- [ ] Wczytać interfejs i filtr z config.yaml.
-- [ ] Uruchomić sniffing pakietów:
-  - Za pomocą scapy.sniff() lub pyshark.LiveCapture().
-  - Tryb promiscuous.
-- [ ] Wyodrębniać dane:
-  - src_ip, dst_ip, src_port, dst_port, protocol, payload_size, timestamp.
-- [ ] Publikować event `NEW_PACKET`.
-
----
-
-### modules/features.py
-- [ ] Obsługiwać event `NEW_PACKET`.
-- [ ] Grupować pakiety w przepływy (flow): src_ip, dst_ip, src_port, dst_port, protocol.
-- [ ] Liczyć cechy:
-  - liczba pakietów,
-  - sumaryczny rozmiar bajtów,
-  - czas trwania przepływu,
-  - bitrate.
-- [ ] Publikować event `NEW_FEATURES`.
-
----
-
-### modules/detection.py
-- [ ] Wczytać modele AI z katalogu `data/models/`.
-- [ ] Obsługiwać event `NEW_FEATURES`.
-- [ ] Wykrywać anomalie (Isolation Forest lub Autoencoder).
-- [ ] Klasyfikować znane zagrożenia (model nadzorowany).
-- [ ] Publikować event `NEW_THREAT` z:
-  - ip, typ zagrożenia, confidence, details.
-
----
-
-### modules/scanner.py
-- [ ] Obsługiwać polecenie z UI: "Light scan" lub "Full scan".
-- [ ] Light scan:
-  - Ping sweep (podsiec z configa).
-  - ARP sniff.
-- [ ] Full scan:
-  - Skan portów (socket lub python-nmap).
-  - Identyfikacja systemu operacyjnego.
+## Pomysły na przyszłość
+- [ ] Wizualizacja ruchu sieciowego (wykresy, heatmapy)
+- [ ] Integracja z SIEM/SOC
+- [ ] Wsparcie dla IPv6, VLAN, tuneli
+- [ ] Rozbudowa systemu pluginów (np. pluginy do analizy malware)
 - [ ] Publikować event `SCAN_COMPLETED`.
 
 ---

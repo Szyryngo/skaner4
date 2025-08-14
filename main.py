@@ -8,6 +8,7 @@ def run_qt_gui():
 	from qtui.qt_dashboard import MainWindow
 	from PyQt5.QtWidgets import QApplication
 	app = QApplication(sys.argv)
+	print("QApplication instance before MainWindow:", QApplication.instance())
 	window = MainWindow()
 	window.show()
 	sys.exit(app.exec_())
