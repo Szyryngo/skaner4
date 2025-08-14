@@ -23,189 +23,11 @@ class PacketDetailDialog(QDialog):
         self.setLayout(layout)
 
 class DashboardTab(QWidget):
-
-    def __init__(self):
-        super().__init__()
-        main_layout = QVBoxLayout()
-        title = QLabel("AI Network Packet Analyzer Pro - Dashboard")
-        title.setStyleSheet("font-size: 20px; font-weight: bold; margin-bottom: 10px;")
-        main_layout.addWidget(title)
-        main_layout.addSpacing(10)
-
-        # Wybór interfejsu sieciowego
-        from PyQt5.QtWidgets import QComboBox
-        from modules.netif_pretty import get_interfaces_pretty
-        iface_layout = QHBoxLayout()
-        iface_label = QLabel("Interfejs:")
-        self.iface_combo = QComboBox()
-        self._iface_map = {}  # czytelny opis -> nazwa techniczna
-        for name, pretty in get_interfaces_pretty():
-            self.iface_combo.addItem(pretty)
-            self._iface_map[pretty] = name
-        iface_layout.addWidget(iface_label)
-        iface_layout.addWidget(self.iface_combo)
-        # Dodaj przycisk testowania interfejsów
-        self.test_ifaces_btn = QPushButton("Testuj interfejsy")
-        self.test_ifaces_btn.setStyleSheet("background: #1976D2; color: white; font-weight: bold; border-radius: 6px; padding: 6px 8px;")
-        self.test_ifaces_btn.clicked.connect(self._test_interfaces)
-        iface_layout.addWidget(self.test_ifaces_btn)
-        iface_layout.addStretch()
-        main_layout.addLayout(iface_layout)
-
-        # Przyciski sterujące sniffingiem
-        btn_layout = QHBoxLayout()
-        self.start_btn = QPushButton("Start")
-        self.pause_btn = QPushButton("Pauza")
-        self.stop_btn = QPushButton("Stop")
-        for btn, color in [
-            (self.start_btn, '#4CAF50'),
-            (self.pause_btn, '#FFC107'),
-            (self.stop_btn, '#F44336')]:
-            btn.setFixedWidth(100)
-            btn.setStyleSheet(f"font-weight: bold; background: {color}; color: white; border-radius: 8px; padding: 8px 0px; font-size: 14px;")
-        btn_layout.addWidget(self.start_btn)
-        btn_layout.addWidget(self.pause_btn)
-        btn_layout.addWidget(self.stop_btn)
-        btn_layout.addStretch()
-        main_layout.addLayout(btn_layout)
-        # Inicjalizacja orchestratora w tle i referencji do CaptureModule
-        self._orchestrator = None
-        self._capture = None
-        self._event_queue = []
-        self._sniffing = False
-        self._packet_counter = 0
-        self._init_orchestrator_thread()
-        # Timer do pobierania eventów co 100ms
-        from PyQt5.QtCore import QTimer
-        self._event_timer = QTimer()
-        self._event_timer.timeout.connect(self._process_events)
-        self._event_timer.start(100)
-        self.start_btn.clicked.connect(self._on_start_sniffing)
-
-    def _init_orchestrator_thread(self):
-        import threading
-        def run_orchestrator():
-            from core.orchestrator import Orchestrator
-            orchestrator = Orchestrator()
-            orchestrator.initialize()
-            self._orchestrator = orchestrator
-            # Znajdź CaptureModule
-            for m in orchestrator.modules:
-                if m.__class__.__name__ == "CaptureModule":
-                    self._capture = m
-                    break
-        t = threading.Thread(target=run_orchestrator, daemon=True)
-        t.start()
-
-    def _on_start_sniffing(self):
-        pretty = self.iface_combo.currentText()
-        iface = self._iface_map.get(pretty)
-        if iface and self._capture:
-            self._capture.set_interface(iface)
-            self._sniffing = True
-            print(f"[GUI] Start sniffingu na interfejsie: {iface}")
-        else:
-            from PyQt5.QtWidgets import QMessageBox
-            QMessageBox.warning(self, "Błąd", "Nie wybrano poprawnego interfejsu lub backend niegotowy!")
-
-    def _process_events(self):
-        if not self._sniffing or not self._capture:
-            return
-        event = self._capture.generate_event()
-        if event and event.type == "NEW_PACKET":
-            pkt_bytes = event.data.get("raw_bytes")
-            if pkt_bytes:
-                meta = dict(event.data)
-                self._packet_counter += 1
-                self.add_packet(self._packet_counter, pkt_bytes, meta)
-
-    def _on_start_sniffing(self):
-        # Pobierz wybrany interfejs (czytelny opis -> nazwa techniczna)
-        pretty = self.iface_combo.currentText()
-        iface = self._iface_map.get(pretty)
-        if iface:
-            from modules.capture import CaptureModule
-            print(f"[GUI] Start sniffingu na interfejsie: {iface}")
-            # Możesz tu dodać logikę do przekazania iface do orchestratora/capture
-            # (np. przez event lub bezpośrednio, zależnie od architektury)
-            # Przykład bezpośredni (jeśli masz referencję do capture):
-            # self._capture.set_interface(iface)
-            # (lub wywołanie eventu do orchestratora)
-        else:
-            from PyQt5.QtWidgets import QMessageBox
-            QMessageBox.warning(self, "Błąd", "Nie wybrano poprawnego interfejsu!")
-
-        # Layout główny: poziomy (tabela + panel podglądu)
-        from PyQt5.QtCore import Qt
-        main_splitter = QSplitter()
-        main_splitter.setOrientation(Qt.Horizontal)
-
-        # Lewa strona: tabela pakietów
-        pkt_widget = QWidget()
-        pkt_layout = QVBoxLayout()
-        pkt_group = QGroupBox("Przechwycone pakiety")
-        pkt_group_layout = QVBoxLayout()
-        self.packets = QTableWidget(0, 7)
-        self.packets.setHorizontalHeaderLabels([
-            "ID", "Czas", "Źródło", "Cel", "Protokół", "Rozmiar (B)", "Waga AI"
-        ])
-        self.packets.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.packets.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.packets.verticalHeader().setVisible(False)
-        self.packets.setAlternatingRowColors(True)
-        self.packets.setStyleSheet("QTableWidget {selection-background-color: #2196F3;}")
-        pkt_group_layout.addWidget(self.packets)
-        pkt_group.setLayout(pkt_group_layout)
-        pkt_layout.addWidget(pkt_group)
-        pkt_widget.setLayout(pkt_layout)
-        main_splitter.addWidget(pkt_widget)
-
-        # Dodaj main_splitter do layoutu głównego
-        main_layout.addWidget(main_splitter)
-
-        self._packet_data = []
-        self.setLayout(main_layout)
-
-    def _test_interfaces(self):
-        from modules.capture import CaptureModule
-        results = CaptureModule().test_all_interfaces()
-        msg = "Wyniki testu interfejsów:\n"
-        for iface, res in results.items():
-            msg += f"{iface}: {res}\n"
-        from PyQt5.QtWidgets import QMessageBox
-        QMessageBox.information(self, "Test interfejsów", msg)
-
-    def _on_start_sniffing(self):
-        # Pobierz wybrany interfejs (czytelny opis -> nazwa techniczna)
-        pretty = self.iface_combo.currentText()
-        iface = self._iface_map.get(pretty)
-        if iface:
-            # Przekaż wybrany interfejs do orchestratora/capture
-            try:
-                from core.orchestrator import Orchestrator
-                if hasattr(self, '_orchestrator'):
-                    orchestrator = self._orchestrator
-                else:
-                    orchestrator = Orchestrator()
-                    orchestrator.initialize()
-                    self._orchestrator = orchestrator
-                # Znajdź CaptureModule i ustaw interfejs
-                for m in orchestrator.modules:
-                    if m.__class__.__name__ == "CaptureModule":
-                        m.set_interface(iface)
-                        print(f"[GUI] Start sniffingu na interfejsie: {iface}")
-                        break
-            except Exception as e:
-                from PyQt5.QtWidgets import QMessageBox
-                QMessageBox.warning(self, "Błąd", f"Nie udało się ustawić interfejsu: {e}")
-        else:
-            from PyQt5.QtWidgets import QMessageBox
-            QMessageBox.warning(self, "Błąd", "Nie wybrano poprawnego interfejsu!")
     def add_packet(self, pkt_id, pkt_bytes, meta=None):
         # Dodaj pakiet na początek tabeli i bufora
         if meta is None:
             meta = {}
-        print(f"[DashboardTab] add_packet: pkt_id={pkt_id}, meta={meta}")
+    # print(f"[DashboardTab] add_packet: pkt_id={pkt_id}, meta={meta}")
         self._packet_data.insert(0, (pkt_id, pkt_bytes, meta))
         self.packets.insertRow(0)
         # Kolumny: ID, czas, src, dst, protokół, rozmiar
@@ -259,10 +81,212 @@ class DashboardTab(QWidget):
             self.packets.removeRow(self.packets.rowCount()-1)
             self._packet_data = self._packet_data[:1000]
 
-    # _packet_desc niepotrzebny
+    def __init__(self):
+        super().__init__()
+        self._capture = None
+        main_layout = QVBoxLayout()
+        title = QLabel("AI Network Packet Analyzer Pro - Dashboard")
+        title.setStyleSheet("font-size: 20px; font-weight: bold; margin-bottom: 10px;")
+        main_layout.addWidget(title)
+        main_layout.addSpacing(10)
 
-    # _short_packet niepotrzebny
+        # Wybór interfejsu sieciowego
+        from PyQt5.QtWidgets import QComboBox
+        from modules.netif_pretty import get_interfaces_pretty
+        iface_row = QHBoxLayout()
+        iface_label = QLabel("Interfejs:")
+        self.iface_combo = QComboBox()
+        self._iface_map = {}
+        for name, pretty in get_interfaces_pretty():
+            self.iface_combo.addItem(pretty)
+            self._iface_map[pretty] = name
+        iface_row.addWidget(iface_label)
+        iface_row.addWidget(self.iface_combo)
+        iface_row.addStretch()
+        main_layout.addLayout(iface_row)
 
+        # Przycisk testowania interfejsów i użycia wybranego interfejsu w jednym wierszu
+        test_row = QHBoxLayout()
+        self.test_ifaces_btn = QPushButton("Testuj interfejsy")
+        self.test_ifaces_btn.setStyleSheet("background: #1976D2; color: white; font-weight: bold; border-radius: 6px; padding: 6px 8px;")
+        self.test_ifaces_btn.clicked.connect(self._test_interfaces)
+        test_row.addWidget(self.test_ifaces_btn)
+
+        self.use_iface_btn = QPushButton("Użyj wybrany interfejs")
+        self.use_iface_btn.setStyleSheet("background: #388E3C; color: white; font-weight: bold; border-radius: 6px; padding: 6px 8px;")
+        self.use_iface_btn.clicked.connect(self._use_selected_interface)
+        test_row.addWidget(self.use_iface_btn)
+        test_row.addStretch()
+        main_layout.addLayout(test_row)
+
+        # Przyciski sterujące sniffingiem w osobnym wierszu
+        btn_row = QHBoxLayout()
+        self.start_btn = QPushButton("Start")
+        self.pause_btn = QPushButton("Pauza")
+        self.stop_btn = QPushButton("Stop")
+        for btn, color in [
+            (self.start_btn, '#4CAF50'),
+            (self.pause_btn, '#FFC107'),
+            (self.stop_btn, '#F44336')]:
+            btn.setFixedWidth(100)
+            btn.setStyleSheet(f"font-weight: bold; background: {color}; color: white; border-radius: 8px; padding: 8px 0px; font-size: 14px;")
+        btn_row.addWidget(self.start_btn)
+        btn_row.addWidget(self.pause_btn)
+        btn_row.addWidget(self.stop_btn)
+        btn_row.addStretch()
+        main_layout.addLayout(btn_row)
+
+        # Layout główny: poziomy (tabela + panel podglądu)
+        from PyQt5.QtCore import Qt
+        main_splitter = QSplitter()
+        main_splitter.setOrientation(Qt.Horizontal)
+
+        # Lewa strona: tabela pakietów
+        pkt_widget = QWidget()
+        pkt_layout = QVBoxLayout()
+        pkt_group = QGroupBox("Przechwycone pakiety")
+        pkt_group_layout = QVBoxLayout()
+        self.packets = QTableWidget(0, 7)
+        self.packets.setHorizontalHeaderLabels([
+            "ID", "Czas", "Źródło", "Cel", "Protokół", "Rozmiar (B)", "Waga AI"
+        ])
+        self.packets.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.packets.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.packets.verticalHeader().setVisible(False)
+        self.packets.setAlternatingRowColors(True)
+        self.packets.setStyleSheet("QTableWidget {selection-background-color: #2196F3;}")
+        pkt_group_layout.addWidget(self.packets)
+        pkt_group.setLayout(pkt_group_layout)
+        pkt_layout.addWidget(pkt_group)
+        pkt_widget.setLayout(pkt_layout)
+        main_splitter.addWidget(pkt_widget)
+
+        # Dodaj main_splitter do layoutu głównego
+        main_layout.addWidget(main_splitter)
+
+        # Dolna belka/log panel
+        from PyQt5.QtWidgets import QTextEdit
+        self.status_log = QTextEdit()
+        self.status_log.setReadOnly(True)
+        self.status_log.setMaximumHeight(60)
+        self.status_log.setStyleSheet("background: #222; color: #fff; font-family: Consolas, monospace; font-size: 12px; border-radius: 6px; padding: 4px;")
+        main_layout.addWidget(self.status_log)
+
+        self._packet_data = []
+        self.setLayout(main_layout)
+
+        # Połącz przyciski z metodami
+        self.start_btn.clicked.connect(self._on_start_sniffing)
+        self.pause_btn.clicked.connect(self._on_pause_sniffing)
+        self.stop_btn.clicked.connect(self._on_stop_sniffing)
+
+        # Inicjalizacja backendu/orchestratora
+        self._sniffing = False
+        self._orchestrator = None
+        self._packet_counter = 0
+
+        # Timer do cyklicznego pobierania pakietów
+        from PyQt5.QtCore import QTimer
+        self._event_timer = QTimer(self)
+        self._event_timer.timeout.connect(self._process_new_packets)
+        self._event_timer.start(100)
+
+    def _process_new_packets(self):
+        """Pobiera nowe pakiety z CaptureModule i wyświetla je w tabeli tylko gdy sniffing aktywny."""
+        if not self._sniffing:
+            return
+        if self._capture and hasattr(self._capture, 'generate_event'):
+            event = self._capture.generate_event()
+            if event and event.type == "NEW_PACKET":
+                pkt_bytes = event.data.get("raw_bytes")
+                meta = dict(event.data)
+                self._packet_counter += 1
+                self.add_packet(self._packet_counter, pkt_bytes, meta)
+
+    def _use_selected_interface(self):
+        pretty = self.iface_combo.currentText()
+        iface = self._iface_map.get(pretty)
+        if iface:
+            try:
+                from core.orchestrator import Orchestrator
+                if not self._orchestrator:
+                    orchestrator = Orchestrator()
+                    orchestrator.initialize()
+                    self._orchestrator = orchestrator
+                else:
+                    orchestrator = self._orchestrator
+                # Znajdź CaptureModule i ustaw interfejs
+                for m in orchestrator.modules:
+                    if m.__class__.__name__ == "CaptureModule":
+                        m.set_interface(iface)
+                        self._capture = m
+                        break
+                self.log_status(f"Ustawiono interfejs: {pretty}")
+            except Exception as e:
+                from PyQt5.QtWidgets import QMessageBox
+                QMessageBox.warning(self, "Błąd", f"Nie udało się ustawić interfejsu: {e}")
+                self.log_status(f"Błąd: nie udało się ustawić interfejsu: {e}")
+        else:
+            from PyQt5.QtWidgets import QMessageBox
+            QMessageBox.warning(self, "Błąd", "Nie wybrano poprawnego interfejsu!")
+            self.log_status("Błąd: nie wybrano poprawnego interfejsu!")
+
+
+    def _test_interfaces(self):
+        from modules.capture import CaptureModule
+        results = CaptureModule().test_all_interfaces()
+        msg = "Wyniki testu interfejsów:\n"
+        for iface, res in results.items():
+            msg += f"{iface}: {res}\n"
+        from PyQt5.QtWidgets import QMessageBox
+        QMessageBox.information(self, "Test interfejsów", msg)
+        self.log_status("Wykonano test interfejsów.")
+
+    def _on_start_sniffing(self):
+        pretty = self.iface_combo.currentText()
+        iface = self._iface_map.get(pretty)
+        if iface:
+            try:
+                from core.orchestrator import Orchestrator
+                if not self._orchestrator:
+                    orchestrator = Orchestrator()
+                    orchestrator.initialize()
+                    self._orchestrator = orchestrator
+                else:
+                    orchestrator = self._orchestrator
+                # Znajdź CaptureModule i ustaw interfejs
+                for m in orchestrator.modules:
+                    if m.__class__.__name__ == "CaptureModule":
+                        m.set_interface(iface)
+                        self._capture = m
+                        break
+                self._sniffing = True
+                self.log_status(f"Sniffing uruchomiony na interfejsie: {pretty}")
+            except Exception as e:
+                from PyQt5.QtWidgets import QMessageBox
+                QMessageBox.warning(self, "Błąd", f"Nie udało się ustawić interfejsu: {e}")
+                self.log_status(f"Błąd: nie udało się ustawić interfejsu: {e}")
+        else:
+            from PyQt5.QtWidgets import QMessageBox
+            QMessageBox.warning(self, "Błąd", "Nie wybrano poprawnego interfejsu!")
+            self.log_status("Błąd: nie wybrano poprawnego interfejsu!")
+
+    def _on_pause_sniffing(self):
+        if self._sniffing:
+            self._sniffing = False
+            self.log_status("Sniffing wstrzymany.")
+
+    def _on_stop_sniffing(self):
+        if self._sniffing:
+            self._sniffing = False
+            self.log_status("Sniffing zatrzymany.")
+
+    def log_status(self, msg):
+        from datetime import datetime
+        ts = datetime.now().strftime('%H:%M:%S')
+        self.status_log.append(f"[{ts}] {msg}")
+
+    # ...existing code...
 
     def _show_packet_details_inline(self, row, col):
         idx = row
@@ -290,6 +314,17 @@ class DashboardTab(QWidget):
             asciistr = ''.join(chr(b) if 32 <= b < 127 else '.' for b in chunk)
             lines.append(asciistr)
         return '\n'.join(lines)
+
+    # ...existing code...
+
+    # _packet_desc niepotrzebny
+
+    # _short_packet niepotrzebny
+
+
+    # ...existing code...
+
+    # ...existing code...
 
 class DevicesTab(QWidget):
     def __init__(self):
