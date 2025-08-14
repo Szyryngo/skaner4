@@ -1,5 +1,17 @@
 # AI Network Packet Analyzer Pro
 
+## 🆕 Ostatnie zmiany (sierpień 2025)
+- Naprawiono i uproszczono kod dashboardu (qtui/qt_dashboard.py):
+	- Usunięto powielone fragmenty i błędne wcięcia w klasie DashboardTab.
+	- Wszystkie przyciski i pola wyboru są zawsze widoczne i nie znikają.
+	- Dodano dolną belkę logów (status bar) z informacjami o działaniach użytkownika.
+	- Przycisk "Pauza" i "Stop" poprawnie zatrzymują cykliczne pobieranie pakietów.
+	- Pakiety wyświetlane są tylko w GUI, nie pojawiają się już w konsoli.
+	- QTimer cyklicznie pobiera pakiety do tabeli, gdy sniffing jest aktywny.
+	- Czytelny wybór interfejsu sieciowego (QComboBox, testowanie i użycie wybranego interfejsu).
+	- Integracja orchestratora z GUI, automatyczne przekazywanie eventów.
+	- Kod jest gotowy do dalszej rozbudowy i testów.
+
 ## 📌 Cel projektu
 Jest to modularny, rozszerzalny system do:
 - przechwytywania pakietów sieciowych w trybie promiscuous,
