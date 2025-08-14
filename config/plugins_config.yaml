@@ -1,1 +1,5 @@
-# Plugins configuration file (YAML)
+
+plugins:
+	- path: example_plugin.py
+		class: ExamplePlugin
+		enabled: true

@@ -1,1 +1,6 @@
-# Main configuration file (YAML)
+
+# Przykładowa konfiguracja
+network_interface: eth0
+filter: ''
+ai_model_path: data/models/
+ui_port: 5000
