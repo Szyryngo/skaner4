@@ -21,6 +21,9 @@
 - Dodano `_set_initial_window_size` do MainWindow.
 - Uzupełniono wyświetlanie HEX/ASCII po kliknięciu pakietu.
 - Usunięto wywołania `_init_db` z MainWindow.
+- Wszystkie zakładki korzystają z layoutów .ui (Qt Designer), logika w Pythonie.
+- Test interfejsów loguje tylko interfejs przechwytujący pakiety do dolnej belki logów.
+- Kod gotowy do dalszego rozwoju i testów.
 
 ## Użytkowanie
 - Kliknięcie pakietu w tabeli pokazuje szczegóły, HEX i ASCII.

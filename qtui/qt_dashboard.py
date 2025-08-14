@@ -38,26 +38,30 @@ class DashboardTab(QWidget):
     # usunięto pustą, powieloną definicję __init__
     def __init__(self):
         super().__init__()
-        self._capture = None
-        main_layout = QVBoxLayout()
+        from PyQt5 import uic
+        uic.loadUi("qtui/dashboard.ui", self)
+        # Przypisz referencje do widżetów z .ui
+        from PyQt5.QtWidgets import QComboBox, QPushButton, QTableWidget, QTextEdit
+        self.interface_combo = self.findChild(QComboBox, "interface_combo")
+        self.filter_combo = self.findChild(QComboBox, "filter_combo")
+        self.start_btn = self.findChild(QPushButton, "start_btn")
+        self.pause_btn = self.findChild(QPushButton, "pause_btn")
+        self.stop_btn = self.findChild(QPushButton, "stop_btn")
+        self.test_btn = self.findChild(QPushButton, "test_btn")
+        self.packets = self.findChild(QTableWidget, "packets_table")
+        self.detail_info = self.findChild(QTextEdit, "detail_info")
+        self.hex_view = self.findChild(QTextEdit, "hex_view")
+        self.ascii_view = self.findChild(QTextEdit, "ascii_view")
+        self.status_log = self.findChild(QTextEdit, "status_log")
 
-        # --- GÓRNY PASEK: wybór interfejsu, filtr BPF, przyciski sniffingu, testowanie ---
-        top_row = QHBoxLayout()
-
-        # QComboBox: wybór interfejsu
+        # Inicjalizacja pozostałych pól i logiki
         from modules.netif_pretty import get_interfaces_pretty
-        self.interface_combo = QComboBox()
-        self.interface_combo.setMinimumWidth(220)
-        self.interface_combo.setEditable(False)
         self._iface_map = get_interfaces_pretty()
+        self.interface_combo.clear()
         for iface, pretty in self._iface_map:
             self.interface_combo.addItem(pretty, iface)
-        top_row.addWidget(QLabel("Interfejs:"))
-        top_row.addWidget(self.interface_combo)
         self.interface_combo.currentIndexChanged.connect(self._on_interface_changed)
-
-        # QComboBox: filtr BPF
-        self.filter_combo = QComboBox()
+        self.filter_combo.clear()
         self.filter_combo.setEditable(True)
         self.filter_combo.setMinimumWidth(180)
         self.filter_combo.addItem("Nie filtruj")
@@ -66,110 +70,35 @@ class DashboardTab(QWidget):
         ])
         self.filter_combo.currentIndexChanged.connect(self._on_filter_combo_changed)
         self.filter_combo.lineEdit().editingFinished.connect(self._on_filter_edit_changed)
-        top_row.addWidget(QLabel("Filtr BPF:"))
-        top_row.addWidget(self.filter_combo)
-
-        # Przycisk: testowanie interfejsów
-        self.test_btn = QPushButton("Testuj interfejsy")
-        self.test_btn.setFixedWidth(140)
-        self.test_btn.setStyleSheet("font-weight: bold; background: #607D8B; color: white; border-radius: 8px; padding: 8px 0px; font-size: 14px;")
         self.test_btn.clicked.connect(self._on_test_interfaces)
-        top_row.addWidget(self.test_btn)
-
-        # Przyciski sniffingu
-        self.start_btn = QPushButton("Start")
-        self.pause_btn = QPushButton("Pauza")
-        self.stop_btn = QPushButton("Stop")
-        for btn, color, pressed in [
-            (self.start_btn, '#4CAF50', '#087f23'),
-            (self.pause_btn, '#FFC107', '#b28704'),
-            (self.stop_btn, '#F44336', '#b71c1c')]:
-            btn.setFixedWidth(100)
-            btn.setStyleSheet(f"""
-                QPushButton {{
-                    font-weight: bold; background: {color}; color: white; border-radius: 8px; padding: 8px 0px; font-size: 14px;
-                }}
-                QPushButton:pressed {{
-                    background: {pressed};
-                    border: 2px inset {pressed};
-                }}
-            """)
         self.start_btn.clicked.connect(self._on_start_sniffing)
         self.pause_btn.clicked.connect(self._on_pause_sniffing)
         self.stop_btn.clicked.connect(self._on_stop_sniffing)
-        top_row.addWidget(self.start_btn)
-        top_row.addWidget(self.pause_btn)
-        top_row.addWidget(self.stop_btn)
-        top_row.addStretch()
-        main_layout.addLayout(top_row)
-
-        # --- SPLITTER: tabela pakietów po lewej, panel szczegółów po prawej ---
-        splitter = QSplitter(Qt.Horizontal)
-        # Lewa: tabela pakietów
-        pkt_group = QGroupBox("Przechwycone pakiety")
-        pkt_group_layout = QVBoxLayout()
-        self.packets = QTableWidget(0, 8)
+        self.packets.setColumnCount(8)
         self.packets.setHorizontalHeaderLabels([
             "ID", "Czas", "Źródło", "Cel", "Protokół", "Rozmiar (B)", "Waga AI", "Geolokalizacja"
         ])
+        from PyQt5.QtWidgets import QAbstractItemView
         self.packets.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.packets.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.packets.verticalHeader().setVisible(False)
         self.packets.setAlternatingRowColors(True)
         self.packets.setStyleSheet("QTableWidget {selection-background-color: #2196F3;}")
         self.packets.cellClicked.connect(self._show_packet_details_inline)
-        pkt_group_layout.addWidget(self.packets)
-        pkt_group.setLayout(pkt_group_layout)
-        splitter.addWidget(pkt_group)
-
-        # Prawa: panel szczegółów pakietu
-        details_widget = QWidget()
-        details_layout = QVBoxLayout()
-        details_layout.addWidget(QLabel("Szczegóły pakietu:"))
-        self.detail_info = QTextEdit()
-        self.detail_info.setReadOnly(True)
         self.detail_info.setPlaceholderText("Wybierz pakiet, aby zobaczyć szczegóły...")
-        details_layout.addWidget(self.detail_info)
-        details_layout.addWidget(QLabel("HEX:"))
-        self.hex_view = QTextEdit()
-        self.hex_view.setReadOnly(True)
-        self.hex_view.setMaximumHeight(100)
-        details_layout.addWidget(self.hex_view)
-        details_layout.addWidget(QLabel("ASCII:"))
-        self.ascii_view = QTextEdit()
-        self.ascii_view.setReadOnly(True)
-        self.ascii_view.setMaximumHeight(100)
-        details_layout.addWidget(self.ascii_view)
-        details_widget.setLayout(details_layout)
-        splitter.addWidget(details_widget)
-        splitter.setSizes([700, 300])
-        main_layout.addWidget(splitter, stretch=1)
-
-        # Dolna belka/log panel
-        self.status_log = QTextEdit()
-        self.status_log.setReadOnly(True)
-        self.status_log.setMaximumHeight(60)
         self.status_log.setStyleSheet("background: #222; color: #fff; font-family: Consolas, monospace; font-size: 12px; border-radius: 6px; padding: 4px;")
-        main_layout.addWidget(self.status_log)
 
-        self.setLayout(main_layout)
+        self._capture = None
         self._packet_data = []
-        # Inicjalizacja bazy danych
         self._db_path = "packets.db"
         self._init_db()
-
-        # Inicjalizacja backendu/orchestratora
         self._sniffing = False
         self._orchestrator = None
         self._packet_counter = 0
-
-        # Timer do cyklicznego pobierania pakietów
         from PyQt5.QtCore import QTimer
         self._event_timer = QTimer(self)
         self._event_timer.timeout.connect(self._process_new_packets)
         self._event_timer.start(100)
-
-        # Wczytaj filtr z config.yaml jeśli istnieje
         import yaml
         cfg_path = "config/config.yaml"
         try:
@@ -215,20 +144,22 @@ class DashboardTab(QWidget):
                 self.interface_combo.setCurrentIndex(idx[0])
 
     def _on_test_interfaces(self):
-        from PyQt5.QtWidgets import QMessageBox
         if not hasattr(self, '_capture') or self._capture is None:
-            QMessageBox.warning(self, "Błąd", "Brak CaptureModule!")
+            self.log_status("Brak CaptureModule!")
             return
         try:
             results = self._capture.test_all_interfaces()
-            msg = ""
+            found = None
             for iface, res in results.items():
-                msg += f"<b>{iface}</b>: {res} pakietów<br>" if isinstance(res, int) else f"<b>{iface}</b>: {res}<br>"
-            if not msg:
-                msg = "Brak wyników testu."
-            QMessageBox.information(self, "Wyniki testu interfejsów", msg)
+                if isinstance(res, int) and res > 0:
+                    found = iface
+                    break
+            if found:
+                self.log_status(f"Przechwytywanie pakietów: <b>{found}</b>")
+            else:
+                self.log_status("Żaden interfejs nie przechwytuje pakietów.")
         except Exception as e:
-            QMessageBox.critical(self, "Błąd testu", str(e))
+            self.log_status(f"Błąd testu interfejsów: {e}")
 
     def _on_interface_changed(self, idx):
         iface = self.interface_combo.itemData(idx)
@@ -505,30 +436,11 @@ class DashboardTab(QWidget):
 print('qt_dashboard.py: przed DevicesTab')
 class DevicesTab(QWidget):
     def __init__(self):
-        from PyQt5.QtWidgets import QTableWidget, QTableWidgetItem, QAbstractItemView
         super().__init__()
-        layout = QVBoxLayout()
-        title = QLabel("Live Devices")
-        title.setStyleSheet("font-size: 16px; font-weight: bold; margin-bottom: 10px;")
-        layout.addWidget(title)
-        group = QGroupBox("Aktywne urządzenia w sieci")
-        group_layout = QVBoxLayout()
-        self.devices = QTableWidget(0, 5)
-        self.devices.setHorizontalHeaderLabels([
-            "IP", "MAC", "Ostatnio widziany", "Pakiety", "Status"
-        ])
-        self.devices.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.devices.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.devices.verticalHeader().setVisible(False)
-        self.devices.setAlternatingRowColors(True)
-        self.devices.setStyleSheet("QTableWidget {selection-background-color: #2196F3;}")
-        group_layout.addWidget(self.devices)
-        group.setLayout(group_layout)
-        layout.addWidget(group)
-        layout.addStretch()
-        self.setLayout(layout)
-
-        # Bufor: lista słowników z danymi urządzeń
+        from PyQt5 import uic
+        from PyQt5.QtWidgets import QTableWidget
+        uic.loadUi("qtui/devices.ui", self)
+        self.devices = self.findChild(QTableWidget, "devices")
         self._device_data = []
 
     def update_device(self, device_info):
@@ -572,20 +484,11 @@ print('qt_dashboard.py: przed ScannerTab')
 class ScannerTab(QWidget):
     def __init__(self):
         super().__init__()
-        layout = QVBoxLayout()
-        title = QLabel("Network Scanner")
-        title.setStyleSheet("font-size: 16px; font-weight: bold; margin-bottom: 10px;")
-        layout.addWidget(title)
-        group = QGroupBox("Skanowanie sieci")
-        group_layout = QVBoxLayout()
-        self.scan_btn = QPushButton("Uruchom skanowanie")
-        group_layout.addWidget(self.scan_btn)
-        self.results = QListWidget()
-        group_layout.addWidget(self.results)
-        group.setLayout(group_layout)
-        layout.addWidget(group)
-        layout.addStretch()
-        self.setLayout(layout)
+        from PyQt5 import uic
+        from PyQt5.QtWidgets import QPushButton, QListWidget
+        uic.loadUi("qtui/scanner.ui", self)
+        self.scan_btn = self.findChild(QPushButton, "scan_btn")
+        self.results = self.findChild(QListWidget, "results")
 
 
 from PyQt5.QtWidgets import QHBoxLayout, QLineEdit, QMessageBox, QComboBox, QFormLayout
@@ -593,54 +496,19 @@ from PyQt5.QtWidgets import QHBoxLayout, QLineEdit, QMessageBox, QComboBox, QFor
 
 print('qt_dashboard.py: przed ConfigTab')
 class ConfigTab(QWidget):
-    PRESETS = [
-        ("800 x 600", 800, 600),
-        ("1024 x 768", 1024, 768),
-        ("1280 x 800", 1280, 800),
-        ("1366 x 768", 1366, 768),
-        ("1600 x 900", 1600, 900),
-        ("1920 x 1080", 1920, 1080),
-        ("2560 x 1440", 2560, 1440),
-        ("3840 x 2160", 3840, 2160),
-    ]
     def __init__(self, main_window=None):
         super().__init__()
+        from PyQt5 import uic
+        from PyQt5.QtWidgets import QComboBox, QLineEdit, QPushButton
+        uic.loadUi("qtui/config.ui", self)
         self.main_window = main_window
-        layout = QVBoxLayout()
-        title = QLabel("Konfiguracja okna GUI")
-        title.setStyleSheet("font-size: 16px; font-weight: bold; margin-bottom: 10px;")
-        layout.addWidget(title)
-
-        group = QGroupBox("Rozmiar okna")
-        form = QFormLayout()
-
-        self.preset_combo = QComboBox()
-        for label, w, h in self.PRESETS:
-            self.preset_combo.addItem(label, (w, h))
-        self.preset_combo.currentIndexChanged.connect(self._preset_selected)
-        form.addRow("Wybierz rozmiar:", self.preset_combo)
-
-        self.width_input = QLineEdit()
-        self.height_input = QLineEdit()
-        self.width_input.setMaximumWidth(80)
-        self.height_input.setMaximumWidth(80)
-        wh_box = QHBoxLayout()
-        wh_box.addWidget(QLabel("Szerokość:"))
-        wh_box.addWidget(self.width_input)
-        wh_box.addWidget(QLabel("Wysokość:"))
-        wh_box.addWidget(self.height_input)
-        wh_box.addStretch()
-        form.addRow("Ręcznie:", wh_box)
-
-        self.apply_btn = QPushButton("Zastosuj rozmiar okna")
-        form.addRow(self.apply_btn)
-        group.setLayout(form)
-        layout.addWidget(group)
-        layout.addStretch()
-        self.setLayout(layout)
-
+        self.preset_combo = self.findChild(QComboBox, "preset_combo")
+        self.width_input = self.findChild(QLineEdit, "width_input")
+        self.height_input = self.findChild(QLineEdit, "height_input")
+        self.apply_btn = self.findChild(QPushButton, "apply_btn")
         self._load_window_size()
         self.apply_btn.clicked.connect(self._apply_window_size)
+        self.preset_combo.currentIndexChanged.connect(self._preset_selected)
 
     def _preset_selected(self, idx):
         w, h = self.preset_combo.currentData()

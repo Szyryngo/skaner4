@@ -1,8 +1,8 @@
 
 
-# TODO – AI Network Packet Analyzer Pro
-
-## Stan na sierpień 2025
+- [x] Wszystkie zakładki korzystają z layoutów .ui (Qt Designer), logika w Pythonie
+- [x] Test interfejsów loguje tylko interfejs przechwytujący pakiety do dolnej belki logów
+- [x] Dokumentacja uzupełniona (qt_dashboard.py.docstring.txt)
 - [x] Dashboard PyQt5: oddzielne przyciski, wybór interfejsu, dolna belka logów, panel szczegółów, pole filtra BPF
 - [x] Przechwytywanie pakietów, dynamiczna tabela, panel szczegółów, HEX/ASCII (po kliknięciu wiersza wyświetla się HEX/ASCII)
 - [x] Integracja orchestratora z GUI, cykliczne pobieranie pakietów (QTimer)

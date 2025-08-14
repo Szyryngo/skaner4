@@ -1,0 +1,157 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>DashboardTab</class>
+ <widget class="QWidget" name="DashboardTab">
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <item>
+    <layout class="QHBoxLayout" name="topRowLayout">
+     <item>
+      <widget class="QLabel" name="labelInterface">
+       <property name="text">
+        <string>Interfejs:</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QComboBox" name="interface_combo"/>
+     </item>
+     <item>
+      <widget class="QLabel" name="labelFilter">
+       <property name="text">
+        <string>Filtr BPF:</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QComboBox" name="filter_combo"/>
+     </item>
+     <item>
+      <widget class="QPushButton" name="start_btn">
+       <property name="text">
+        <string>Start</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="pause_btn">
+       <property name="text">
+        <string>Pauza</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="stop_btn">
+       <property name="text">
+        <string>Stop</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="test_btn">
+       <property name="text">
+        <string>Testuj interfejs</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <widget class="QSplitter" name="splitter">
+     <property name="orientation">
+      <enum>Qt::Horizontal</enum>
+     </property>
+     <widget class="QGroupBox" name="pkt_group">
+      <property name="title">
+       <string>Przechwycone pakiety</string>
+      </property>
+      <layout class="QVBoxLayout" name="pkt_group_layout">
+       <item>
+        <widget class="QTableWidget" name="packets_table">
+         <column>
+          <property name="text">
+           <string>ID</string>
+          </property>
+         </column>
+         <column>
+          <property name="text">
+           <string>Czas</string>
+          </property>
+         </column>
+         <column>
+          <property name="text">
+           <string>Źródło</string>
+          </property>
+         </column>
+         <column>
+          <property name="text">
+           <string>Cel</string>
+          </property>
+         </column>
+         <column>
+          <property name="text">
+           <string>Protokół</string>
+          </property>
+         </column>
+         <column>
+          <property name="text">
+           <string>Rozmiar (B)</string>
+          </property>
+         </column>
+         <column>
+          <property name="text">
+           <string>Waga AI</string>
+          </property>
+         </column>
+         <column>
+          <property name="text">
+           <string>Geolokalizacja</string>
+          </property>
+         </column>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="details_widget">
+      <layout class="QVBoxLayout" name="details_layout">
+       <item>
+        <widget class="QLabel" name="labelDetails">
+         <property name="text">
+          <string>Szczegóły pakietu:</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QTextEdit" name="detail_info"/>
+       </item>
+       <item>
+        <widget class="QLabel" name="labelHex">
+         <property name="text">
+          <string>HEX:</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QTextEdit" name="hex_view"/>
+       </item>
+       <item>
+        <widget class="QLabel" name="labelAscii">
+         <property name="text">
+          <string>ASCII:</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QTextEdit" name="ascii_view"/>
+       </item>
+      </layout>
+     </widget>
+    </widget>
+   </item>
+   <item>
+    <widget class="QTextEdit" name="status_log"/>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
