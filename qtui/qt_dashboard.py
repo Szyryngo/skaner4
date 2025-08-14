@@ -34,11 +34,14 @@ class DashboardTab(QWidget):
 
         # Wybór interfejsu sieciowego
         from PyQt5.QtWidgets import QComboBox
-        from modules.netif import list_interfaces
+        from modules.netif_pretty import get_interfaces_pretty
         iface_layout = QHBoxLayout()
         iface_label = QLabel("Interfejs:")
         self.iface_combo = QComboBox()
-        self.iface_combo.addItems(list_interfaces())
+        self._iface_map = {}  # czytelny opis -> nazwa techniczna
+        for name, pretty in get_interfaces_pretty():
+            self.iface_combo.addItem(pretty)
+            self._iface_map[pretty] = name
         iface_layout.addWidget(iface_label)
         iface_layout.addWidget(self.iface_combo)
         # Dodaj przycisk testowania interfejsów
@@ -58,14 +61,79 @@ class DashboardTab(QWidget):
             (self.start_btn, '#4CAF50'),
             (self.pause_btn, '#FFC107'),
             (self.stop_btn, '#F44336')]:
-            btn.setFixedWidth(90)
-            btn.setStyleSheet(f"font-weight: bold; background: {color}; color: white; border-radius: 6px; padding: 6px 0px;")
-        btn_layout.addStretch()
+            btn.setFixedWidth(100)
+            btn.setStyleSheet(f"font-weight: bold; background: {color}; color: white; border-radius: 8px; padding: 8px 0px; font-size: 14px;")
         btn_layout.addWidget(self.start_btn)
         btn_layout.addWidget(self.pause_btn)
         btn_layout.addWidget(self.stop_btn)
         btn_layout.addStretch()
         main_layout.addLayout(btn_layout)
+        # Inicjalizacja orchestratora w tle i referencji do CaptureModule
+        self._orchestrator = None
+        self._capture = None
+        self._event_queue = []
+        self._sniffing = False
+        self._packet_counter = 0
+        self._init_orchestrator_thread()
+        # Timer do pobierania eventów co 100ms
+        from PyQt5.QtCore import QTimer
+        self._event_timer = QTimer()
+        self._event_timer.timeout.connect(self._process_events)
+        self._event_timer.start(100)
+        self.start_btn.clicked.connect(self._on_start_sniffing)
+
+    def _init_orchestrator_thread(self):
+        import threading
+        def run_orchestrator():
+            from core.orchestrator import Orchestrator
+            orchestrator = Orchestrator()
+            orchestrator.initialize()
+            self._orchestrator = orchestrator
+            # Znajdź CaptureModule
+            for m in orchestrator.modules:
+                if m.__class__.__name__ == "CaptureModule":
+                    self._capture = m
+                    break
+        t = threading.Thread(target=run_orchestrator, daemon=True)
+        t.start()
+
+    def _on_start_sniffing(self):
+        pretty = self.iface_combo.currentText()
+        iface = self._iface_map.get(pretty)
+        if iface and self._capture:
+            self._capture.set_interface(iface)
+            self._sniffing = True
+            print(f"[GUI] Start sniffingu na interfejsie: {iface}")
+        else:
+            from PyQt5.QtWidgets import QMessageBox
+            QMessageBox.warning(self, "Błąd", "Nie wybrano poprawnego interfejsu lub backend niegotowy!")
+
+    def _process_events(self):
+        if not self._sniffing or not self._capture:
+            return
+        event = self._capture.generate_event()
+        if event and event.type == "NEW_PACKET":
+            pkt_bytes = event.data.get("raw_bytes")
+            if pkt_bytes:
+                meta = dict(event.data)
+                self._packet_counter += 1
+                self.add_packet(self._packet_counter, pkt_bytes, meta)
+
+    def _on_start_sniffing(self):
+        # Pobierz wybrany interfejs (czytelny opis -> nazwa techniczna)
+        pretty = self.iface_combo.currentText()
+        iface = self._iface_map.get(pretty)
+        if iface:
+            from modules.capture import CaptureModule
+            print(f"[GUI] Start sniffingu na interfejsie: {iface}")
+            # Możesz tu dodać logikę do przekazania iface do orchestratora/capture
+            # (np. przez event lub bezpośrednio, zależnie od architektury)
+            # Przykład bezpośredni (jeśli masz referencję do capture):
+            # self._capture.set_interface(iface)
+            # (lub wywołanie eventu do orchestratora)
+        else:
+            from PyQt5.QtWidgets import QMessageBox
+            QMessageBox.warning(self, "Błąd", "Nie wybrano poprawnego interfejsu!")
 
         # Layout główny: poziomy (tabela + panel podglądu)
         from PyQt5.QtCore import Qt
@@ -107,14 +175,32 @@ class DashboardTab(QWidget):
         from PyQt5.QtWidgets import QMessageBox
         QMessageBox.information(self, "Test interfejsów", msg)
 
-    def _test_interfaces(self):
-        from modules.capture import CaptureModule
-        results = CaptureModule().test_all_interfaces()
-        msg = "Wyniki testu interfejsów:\n"
-        for iface, res in results.items():
-            msg += f"{iface}: {res}\n"
-        from PyQt5.QtWidgets import QMessageBox
-        QMessageBox.information(self, "Test interfejsów", msg)
+    def _on_start_sniffing(self):
+        # Pobierz wybrany interfejs (czytelny opis -> nazwa techniczna)
+        pretty = self.iface_combo.currentText()
+        iface = self._iface_map.get(pretty)
+        if iface:
+            # Przekaż wybrany interfejs do orchestratora/capture
+            try:
+                from core.orchestrator import Orchestrator
+                if hasattr(self, '_orchestrator'):
+                    orchestrator = self._orchestrator
+                else:
+                    orchestrator = Orchestrator()
+                    orchestrator.initialize()
+                    self._orchestrator = orchestrator
+                # Znajdź CaptureModule i ustaw interfejs
+                for m in orchestrator.modules:
+                    if m.__class__.__name__ == "CaptureModule":
+                        m.set_interface(iface)
+                        print(f"[GUI] Start sniffingu na interfejsie: {iface}")
+                        break
+            except Exception as e:
+                from PyQt5.QtWidgets import QMessageBox
+                QMessageBox.warning(self, "Błąd", f"Nie udało się ustawić interfejsu: {e}")
+        else:
+            from PyQt5.QtWidgets import QMessageBox
+            QMessageBox.warning(self, "Błąd", "Nie wybrano poprawnego interfejsu!")
     def add_packet(self, pkt_id, pkt_bytes, meta=None):
         # Dodaj pakiet na początek tabeli i bufora
         if meta is None:
