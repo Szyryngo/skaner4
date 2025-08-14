@@ -1,8 +1,9 @@
 import sys
-from PyQt5.QtWidgets import QApplication, QMainWindow, QTabWidget, QWidget, QVBoxLayout, QLabel, QPushButton, QListWidget, QGroupBox, QTableWidget, QTableWidgetItem, QAbstractItemView
+from PyQt5.QtWidgets import (
+    QApplication, QMainWindow, QTabWidget, QWidget, QVBoxLayout, QLabel, QPushButton, QListWidget, QGroupBox,
+    QTableWidget, QTableWidgetItem, QAbstractItemView, QSplitter, QTextEdit, QHBoxLayout, QDialog
+)
 import threading
-
-from PyQt5.QtWidgets import QPushButton, QDialog, QTextEdit, QHBoxLayout
 
 class PacketDetailDialog(QDialog):
     def __init__(self, pkt_id, hex_data, ascii_data, parent=None):
@@ -22,13 +23,31 @@ class PacketDetailDialog(QDialog):
         self.setLayout(layout)
 
 class DashboardTab(QWidget):
+
     def __init__(self):
         super().__init__()
-        layout = QVBoxLayout()
+        main_layout = QVBoxLayout()
         title = QLabel("AI Network Packet Analyzer Pro - Dashboard")
         title.setStyleSheet("font-size: 20px; font-weight: bold; margin-bottom: 10px;")
-        layout.addWidget(title)
-        layout.addSpacing(10)
+        main_layout.addWidget(title)
+        main_layout.addSpacing(10)
+
+        # Wybór interfejsu sieciowego
+        from PyQt5.QtWidgets import QComboBox
+        from modules.netif import list_interfaces
+        iface_layout = QHBoxLayout()
+        iface_label = QLabel("Interfejs:")
+        self.iface_combo = QComboBox()
+        self.iface_combo.addItems(list_interfaces())
+        iface_layout.addWidget(iface_label)
+        iface_layout.addWidget(self.iface_combo)
+        # Dodaj przycisk testowania interfejsów
+        self.test_ifaces_btn = QPushButton("Testuj interfejsy")
+        self.test_ifaces_btn.setStyleSheet("background: #1976D2; color: white; font-weight: bold; border-radius: 6px; padding: 6px 8px;")
+        self.test_ifaces_btn.clicked.connect(self._test_interfaces)
+        iface_layout.addWidget(self.test_ifaces_btn)
+        iface_layout.addStretch()
+        main_layout.addLayout(iface_layout)
 
         # Przyciski sterujące sniffingiem
         btn_layout = QHBoxLayout()
@@ -46,44 +65,61 @@ class DashboardTab(QWidget):
         btn_layout.addWidget(self.pause_btn)
         btn_layout.addWidget(self.stop_btn)
         btn_layout.addStretch()
-        layout.addLayout(btn_layout)
+        main_layout.addLayout(btn_layout)
 
-        # Lista przechwyconych pakietów
-        from PyQt5.QtWidgets import QTableWidget, QTableWidgetItem, QAbstractItemView
-        pkt_group = QGroupBox("Przechwycone pakiety")
+        # Layout główny: poziomy (tabela + panel podglądu)
+        from PyQt5.QtCore import Qt
+        main_splitter = QSplitter()
+        main_splitter.setOrientation(Qt.Horizontal)
+
+        # Lewa strona: tabela pakietów
+        pkt_widget = QWidget()
         pkt_layout = QVBoxLayout()
-        self.packets = QTableWidget(0, 6)
+        pkt_group = QGroupBox("Przechwycone pakiety")
+        pkt_group_layout = QVBoxLayout()
+        self.packets = QTableWidget(0, 7)
         self.packets.setHorizontalHeaderLabels([
-            "ID", "Czas", "Źródło", "Cel", "Protokół", "Rozmiar (B)"
+            "ID", "Czas", "Źródło", "Cel", "Protokół", "Rozmiar (B)", "Waga AI"
         ])
         self.packets.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.packets.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.packets.verticalHeader().setVisible(False)
         self.packets.setAlternatingRowColors(True)
         self.packets.setStyleSheet("QTableWidget {selection-background-color: #2196F3;}")
-        pkt_layout.addWidget(self.packets)
-        pkt_group.setLayout(pkt_layout)
-        layout.addWidget(pkt_group)
+        pkt_group_layout.addWidget(self.packets)
+        pkt_group.setLayout(pkt_group_layout)
+        pkt_layout.addWidget(pkt_group)
+        pkt_widget.setLayout(pkt_layout)
+        main_splitter.addWidget(pkt_widget)
 
-        # Obsługa kliknięcia w pakiet
-        self.packets.cellDoubleClicked.connect(self._show_packet_details)
+        # Dodaj main_splitter do layoutu głównego
+        main_layout.addWidget(main_splitter)
 
-        # Wykryte zagrożenia (jak dotychczas)
-        group = QGroupBox("Wykryte zagrożenia")
-        group_layout = QVBoxLayout()
-        self.threats = QListWidget()
-        group_layout.addWidget(self.threats)
-        group.setLayout(group_layout)
-        layout.addWidget(group)
-        layout.addStretch()
-        # Bufor na pakiety (id, dane)
         self._packet_data = []
-        self.setLayout(layout)
+        self.setLayout(main_layout)
 
+    def _test_interfaces(self):
+        from modules.capture import CaptureModule
+        results = CaptureModule().test_all_interfaces()
+        msg = "Wyniki testu interfejsów:\n"
+        for iface, res in results.items():
+            msg += f"{iface}: {res}\n"
+        from PyQt5.QtWidgets import QMessageBox
+        QMessageBox.information(self, "Test interfejsów", msg)
+
+    def _test_interfaces(self):
+        from modules.capture import CaptureModule
+        results = CaptureModule().test_all_interfaces()
+        msg = "Wyniki testu interfejsów:\n"
+        for iface, res in results.items():
+            msg += f"{iface}: {res}\n"
+        from PyQt5.QtWidgets import QMessageBox
+        QMessageBox.information(self, "Test interfejsów", msg)
     def add_packet(self, pkt_id, pkt_bytes, meta=None):
         # Dodaj pakiet na początek tabeli i bufora
         if meta is None:
             meta = {}
+        print(f"[DashboardTab] add_packet: pkt_id={pkt_id}, meta={meta}")
         self._packet_data.insert(0, (pkt_id, pkt_bytes, meta))
         self.packets.insertRow(0)
         # Kolumny: ID, czas, src, dst, protokół, rozmiar
@@ -109,8 +145,10 @@ class DashboardTab(QWidget):
         size = meta.get('payload_size', len(pkt_bytes))
         ts = meta.get('timestamp', '-')
         ai_status = meta.get('ai_status', 'safe')
+        # Pobierz wagę AI jeśli jest dostępna
+        ai_weight = meta.get('ai_weight', '-')
         row = [
-            str(pkt_id), str(ts), str(src), str(dst), proto_str, str(size)
+            str(pkt_id), str(ts), str(src), str(dst), proto_str, str(size), str(ai_weight)
         ]
         for col, val in enumerate(row):
             item = QTableWidgetItem(val)
@@ -139,14 +177,15 @@ class DashboardTab(QWidget):
 
     # _short_packet niepotrzebny
 
-    def _show_packet_details(self, row, col):
+
+    def _show_packet_details_inline(self, row, col):
         idx = row
         if 0 <= idx < len(self._packet_data):
             pkt_id, pkt_bytes, meta = self._packet_data[idx]
             hex_data = self._format_hex(pkt_bytes)
             ascii_data = self._format_ascii(pkt_bytes)
-            dlg = PacketDetailDialog(pkt_id, hex_data, ascii_data, self)
-            dlg.exec_()
+            self.hex_view.setText(hex_data)
+            self.ascii_view.setText(ascii_data)
 
     def _format_hex(self, pkt_bytes):
         # HEX dump (16 bajtów na linię)
@@ -369,21 +408,15 @@ class MainWindow(QMainWindow):
         self.setWindowFlag(Qt.Window)
         self.setWindowState(Qt.WindowActive)
 
-        # Integracja orchestratora w osobnym wątku
+    def initialize_orchestrator(self):
+        self._selected_iface = self.dashboard.iface_combo.currentText()
         self._event_queue = queue.Queue()
         self._orchestrator_thread = threading.Thread(target=self._run_orchestrator, daemon=True)
         self._orchestrator_thread.start()
-
         # Timer do odbioru eventów z kolejki co 100ms
         self._event_timer = QTimer()
         self._event_timer.timeout.connect(self._process_events)
         self._event_timer.start(100)
-
-        # Obsługa przycisków dashboardu
-        self.dashboard.start_btn.clicked.connect(self._start_sniffing)
-        self.dashboard.pause_btn.clicked.connect(self._pause_sniffing)
-        self.dashboard.stop_btn.clicked.connect(self._stop_sniffing)
-
         # Stan sniffingu
         self._sniffing = False
         self._paused = False
@@ -395,30 +428,40 @@ class MainWindow(QMainWindow):
         orchestrator = Orchestrator()
         orchestrator.initialize()
         # Znajdź CaptureModule
-        capture = None
+        self._capture = None
         for m in orchestrator.modules:
             if m.__class__.__name__ == "CaptureModule":
-                capture = m
+                self._capture = m
                 break
+        # Ustaw interfejs na start
+        if self._capture:
+            self._capture.set_interface(self._selected_iface)
         # Przechwytuj pakiety tylko gdy _sniffing==True
         while True:
-            if self._sniffing and not self._paused:
-                event = capture.generate_event()
+            if self._sniffing and not self._paused and self._capture:
+                event = self._capture.generate_event()
                 if event and event.type == "NEW_PACKET":
                     self._event_queue.put(event)
-            # Można dodać obsługę innych eventów
             import time
-            time.sleep(0.01)
-
-    def _process_events(self):
-        # Odbierz eventy z kolejki i wyświetl w dashboardzie i devices
+        self.initialize_orchestrator()
+        self._ai_weights = getattr(self, '_ai_weights', {})
         while not self._event_queue.empty():
             event = self._event_queue.get()
             if event.type == "NEW_PACKET":
                 pkt_bytes = event.data.get("raw_bytes")
                 if pkt_bytes:
+                    src_ip = event.data.get('src_ip', '-')
+                    # Zawsze wyświetl ostatnią znaną wagę AI dla src_ip (nie usuwaj z dict)
+                    ai_weight = self._ai_weights.get(src_ip, '-')
+                    meta = dict(event.data)
+                    meta['ai_weight'] = ai_weight
                     self._packet_counter += 1
-                    self.dashboard.add_packet(self._packet_counter, pkt_bytes, event.data)
+                    self.dashboard.add_packet(self._packet_counter, pkt_bytes, meta)
+            elif event.type == "NEW_THREAT":
+                # Zapisz wagę AI dla danego src_ip
+                src_ip = event.data.get('ip', '-')
+                ai_weight = event.data.get('ai_weight', '-')
+                self._ai_weights[src_ip] = ai_weight
             elif event.type == "DEVICE_DETECTED":
                 # Przekaż dane do DevicesTab
                 ip = event.data.get('ip', '-')
@@ -435,6 +478,9 @@ class MainWindow(QMainWindow):
     def _start_sniffing(self):
         self._sniffing = True
         self._paused = False
+        # Ustaw interfejs na aktualnie wybrany
+        if hasattr(self, '_capture') and self._capture:
+            self._capture.set_interface(self._selected_iface)
 
     def _pause_sniffing(self):
         if self._sniffing:

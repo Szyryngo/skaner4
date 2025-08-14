@@ -21,9 +21,18 @@ Jest to modularny, rozszerzalny system do:
 ---
 
 ## 📂 Struktura projektu
-Jasne 🙂  
-Zaczynamy więc **spokojnie, od pierwszego pliku** – czyli od **📄 README.md**.  
-Wkleisz go do repozytorium w katalogu głównym jako `README.md`.
+
+```
+skaner4/
+├── core/               # logika główna, orchestrator, eventy, pluginy
+├── modules/            # sniffing, features, detection, devices, optimizer, scanner, netif
+├── plugins/            # pluginy użytkownika
+├── qtui/               # natywny GUI PyQt5 (qt_dashboard.py)
+├── config/             # pliki konfiguracyjne (config.yaml, plugins_config.yaml)
+├── data/               # modele AI, blacklisty
+├── tests/              # testy jednostkowe
+└── main.py             # punkt startowy
+```
 
 ---
 
@@ -66,12 +75,18 @@ ai-network-analyzer/
 
 ---
 
+
 ## 🚀 Uruchomienie
 ```bash
 pip install -r requirements.txt
 python main.py
 ```
 Program domyślnie uruchamia natywny GUI PyQt5 (main.py → qtui/qt_dashboard.py).
+
+### Funkcje GUI:
+- Dynamiczny wybór interfejsu sieciowego przez użytkownika (QComboBox)
+- Przycisk "Testuj interfejsy" – testuje sniffing na wszystkich interfejsach i pokazuje wyniki w oknie dialogowym
+- Dashboard, Live Devices, Network Scanner, Configuration – wszystko w jednym oknie
 
 ---
 
@@ -83,5 +98,7 @@ Program domyślnie uruchamia natywny GUI PyQt5 (main.py → qtui/qt_dashboard.py
 ---
 
 ## 📖 Dokumentacja developerska
-Patrz **DEVELOPMENT.md** – znajdziesz tam szczegółowe instrukcje implementacji krok po kroku (dla ludzi i GitHub Copilota).
+- Szczegółowy opis architektury, API i eventów: **DEVELOPMENT.md**
+- Opis wszystkich modułów i ich przeznaczenia: **MODULES.md**
+- Lista zadań implementacyjnych i testowych: **TODO.md**
 ```

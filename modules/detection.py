@@ -57,10 +57,12 @@ class DetectionModule(ModuleBase):
 			del self._last_features
 			del self._last_features_meta
 			if pred == -1:
+				# Dodaj wagę AI do meta, by GUI mogło ją wyświetlić
 				threat = {
 					'ip': features.get('src_ip', 'unknown'),
 					'threat_type': 'anomaly',
 					'confidence': float(-score),
+					'ai_weight': float(-score),
 					'details': features
 				}
 				print(f"[DetectionModule] AI wykryło zagrożenie: {threat}")
