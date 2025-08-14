@@ -8,6 +8,8 @@ from PyQt5.QtWidgets import (
 )
 import threading
 import yaml
+import sqlite3
+from PyQt5.QtCore import Qt
 
 print('qt_dashboard.py: przed PacketDetailDialog')
 class PacketDetailDialog(QDialog):
@@ -29,6 +31,313 @@ class PacketDetailDialog(QDialog):
 
 print('qt_dashboard.py: przed DashboardTab')
 class DashboardTab(QWidget):
+    def log_status(self, msg):
+        from datetime import datetime
+        ts = datetime.now().strftime('%H:%M:%S')
+        self.status_log.append(f'<span style="color:#8bc34a;">[{ts}]</span> {msg}')
+    # usunięto pustą, powieloną definicję __init__
+    def __init__(self):
+        super().__init__()
+        self._capture = None
+        main_layout = QVBoxLayout()
+
+        # --- GÓRNY PASEK: wybór interfejsu, filtr BPF, przyciski sniffingu, testowanie ---
+        top_row = QHBoxLayout()
+
+        # QComboBox: wybór interfejsu
+        from modules.netif_pretty import get_interfaces_pretty
+        self.interface_combo = QComboBox()
+        self.interface_combo.setMinimumWidth(220)
+        self.interface_combo.setEditable(False)
+        self._iface_map = get_interfaces_pretty()
+        for iface, pretty in self._iface_map:
+            self.interface_combo.addItem(pretty, iface)
+        top_row.addWidget(QLabel("Interfejs:"))
+        top_row.addWidget(self.interface_combo)
+        self.interface_combo.currentIndexChanged.connect(self._on_interface_changed)
+
+        # QComboBox: filtr BPF
+        self.filter_combo = QComboBox()
+        self.filter_combo.setEditable(True)
+        self.filter_combo.setMinimumWidth(180)
+        self.filter_combo.addItem("Nie filtruj")
+        self.filter_combo.addItems([
+            "tcp", "udp", "icmp", "port 80", "port 443", "host 8.8.8.8"
+        ])
+        self.filter_combo.currentIndexChanged.connect(self._on_filter_combo_changed)
+        self.filter_combo.lineEdit().editingFinished.connect(self._on_filter_edit_changed)
+        top_row.addWidget(QLabel("Filtr BPF:"))
+        top_row.addWidget(self.filter_combo)
+
+        # Przycisk: testowanie interfejsów
+        self.test_btn = QPushButton("Testuj interfejsy")
+        self.test_btn.setFixedWidth(140)
+        self.test_btn.setStyleSheet("font-weight: bold; background: #607D8B; color: white; border-radius: 8px; padding: 8px 0px; font-size: 14px;")
+        self.test_btn.clicked.connect(self._on_test_interfaces)
+        top_row.addWidget(self.test_btn)
+
+        # Przyciski sniffingu
+        self.start_btn = QPushButton("Start")
+        self.pause_btn = QPushButton("Pauza")
+        self.stop_btn = QPushButton("Stop")
+        for btn, color, pressed in [
+            (self.start_btn, '#4CAF50', '#087f23'),
+            (self.pause_btn, '#FFC107', '#b28704'),
+            (self.stop_btn, '#F44336', '#b71c1c')]:
+            btn.setFixedWidth(100)
+            btn.setStyleSheet(f"""
+                QPushButton {{
+                    font-weight: bold; background: {color}; color: white; border-radius: 8px; padding: 8px 0px; font-size: 14px;
+                }}
+                QPushButton:pressed {{
+                    background: {pressed};
+                    border: 2px inset {pressed};
+                }}
+            """)
+        self.start_btn.clicked.connect(self._on_start_sniffing)
+        self.pause_btn.clicked.connect(self._on_pause_sniffing)
+        self.stop_btn.clicked.connect(self._on_stop_sniffing)
+        top_row.addWidget(self.start_btn)
+        top_row.addWidget(self.pause_btn)
+        top_row.addWidget(self.stop_btn)
+        top_row.addStretch()
+        main_layout.addLayout(top_row)
+
+        # --- SPLITTER: tabela pakietów po lewej, panel szczegółów po prawej ---
+        splitter = QSplitter(Qt.Horizontal)
+        # Lewa: tabela pakietów
+        pkt_group = QGroupBox("Przechwycone pakiety")
+        pkt_group_layout = QVBoxLayout()
+        self.packets = QTableWidget(0, 8)
+        self.packets.setHorizontalHeaderLabels([
+            "ID", "Czas", "Źródło", "Cel", "Protokół", "Rozmiar (B)", "Waga AI", "Geolokalizacja"
+        ])
+        self.packets.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.packets.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.packets.verticalHeader().setVisible(False)
+        self.packets.setAlternatingRowColors(True)
+        self.packets.setStyleSheet("QTableWidget {selection-background-color: #2196F3;}")
+        self.packets.cellClicked.connect(self._show_packet_details_inline)
+        pkt_group_layout.addWidget(self.packets)
+        pkt_group.setLayout(pkt_group_layout)
+        splitter.addWidget(pkt_group)
+
+        # Prawa: panel szczegółów pakietu
+        details_widget = QWidget()
+        details_layout = QVBoxLayout()
+        details_layout.addWidget(QLabel("Szczegóły pakietu:"))
+        self.detail_info = QTextEdit()
+        self.detail_info.setReadOnly(True)
+        self.detail_info.setPlaceholderText("Wybierz pakiet, aby zobaczyć szczegóły...")
+        details_layout.addWidget(self.detail_info)
+        details_layout.addWidget(QLabel("HEX:"))
+        self.hex_view = QTextEdit()
+        self.hex_view.setReadOnly(True)
+        self.hex_view.setMaximumHeight(100)
+        details_layout.addWidget(self.hex_view)
+        details_layout.addWidget(QLabel("ASCII:"))
+        self.ascii_view = QTextEdit()
+        self.ascii_view.setReadOnly(True)
+        self.ascii_view.setMaximumHeight(100)
+        details_layout.addWidget(self.ascii_view)
+        details_widget.setLayout(details_layout)
+        splitter.addWidget(details_widget)
+        splitter.setSizes([700, 300])
+        main_layout.addWidget(splitter, stretch=1)
+
+        # Dolna belka/log panel
+        self.status_log = QTextEdit()
+        self.status_log.setReadOnly(True)
+        self.status_log.setMaximumHeight(60)
+        self.status_log.setStyleSheet("background: #222; color: #fff; font-family: Consolas, monospace; font-size: 12px; border-radius: 6px; padding: 4px;")
+        main_layout.addWidget(self.status_log)
+
+        self.setLayout(main_layout)
+        self._packet_data = []
+        # Inicjalizacja bazy danych
+        self._db_path = "packets.db"
+        self._init_db()
+
+        # Inicjalizacja backendu/orchestratora
+        self._sniffing = False
+        self._orchestrator = None
+        self._packet_counter = 0
+
+        # Timer do cyklicznego pobierania pakietów
+        from PyQt5.QtCore import QTimer
+        self._event_timer = QTimer(self)
+        self._event_timer.timeout.connect(self._process_new_packets)
+        self._event_timer.start(100)
+
+        # Wczytaj filtr z config.yaml jeśli istnieje
+        import yaml
+        cfg_path = "config/config.yaml"
+        try:
+            with open(cfg_path, 'r', encoding='utf-8') as f:
+                cfg = yaml.safe_load(f)
+        except Exception:
+            cfg = {}
+        bpf = cfg.get('filter', '')
+        if bpf:
+            self.filter_combo.lineEdit().setText(bpf)
+        # Wybierz interfejs z config.yaml jeśli istnieje
+        iface = cfg.get('network_interface', None)
+        if iface:
+            idx = [i for i, (ifn, _) in enumerate(self._iface_map) if ifn == iface]
+            if idx:
+                self.interface_combo.setCurrentIndex(idx[0])
+        self._sniffing = False
+        self._orchestrator = None
+        self._packet_counter = 0
+
+        # Timer do cyklicznego pobierania pakietów
+        from PyQt5.QtCore import QTimer
+        self._event_timer = QTimer(self)
+        self._event_timer.timeout.connect(self._process_new_packets)
+        self._event_timer.start(100)
+
+        # Wczytaj filtr z config.yaml jeśli istnieje
+        import yaml
+        cfg_path = "config/config.yaml"
+        try:
+            with open(cfg_path, 'r', encoding='utf-8') as f:
+                cfg = yaml.safe_load(f)
+        except Exception:
+            cfg = {}
+        bpf = cfg.get('filter', '')
+        if bpf:
+            self.filter_combo.lineEdit().setText(bpf)
+        # Wybierz interfejs z config.yaml jeśli istnieje
+        iface = cfg.get('network_interface', None)
+        if iface:
+            idx = [i for i, (ifn, _) in enumerate(self._iface_map) if ifn == iface]
+            if idx:
+                self.interface_combo.setCurrentIndex(idx[0])
+
+    def _on_test_interfaces(self):
+        from PyQt5.QtWidgets import QMessageBox
+        if not hasattr(self, '_capture') or self._capture is None:
+            QMessageBox.warning(self, "Błąd", "Brak CaptureModule!")
+            return
+        try:
+            results = self._capture.test_all_interfaces()
+            msg = ""
+            for iface, res in results.items():
+                msg += f"<b>{iface}</b>: {res} pakietów<br>" if isinstance(res, int) else f"<b>{iface}</b>: {res}<br>"
+            if not msg:
+                msg = "Brak wyników testu."
+            QMessageBox.information(self, "Wyniki testu interfejsów", msg)
+        except Exception as e:
+            QMessageBox.critical(self, "Błąd testu", str(e))
+
+    def _on_interface_changed(self, idx):
+        iface = self.interface_combo.itemData(idx)
+        if hasattr(self, '_capture') and self._capture:
+            try:
+                self._capture.set_interface(iface)
+                self.log_status(f"Ustawiono interfejs: {iface}")
+            except Exception as e:
+                self.log_status(f"Błąd ustawiania interfejsu: {e}")
+        self.pause_btn = QPushButton("Pauza")
+        self.stop_btn = QPushButton("Stop")
+        for btn, color, pressed in [
+            (self.start_btn, '#4CAF50', '#087f23'),
+            (self.pause_btn, '#FFC107', '#b28704'),
+            (self.stop_btn, '#F44336', '#b71c1c')]:
+            btn.setFixedWidth(100)
+            btn.setStyleSheet(f"""
+                QPushButton {{
+                    font-weight: bold; background: {color}; color: white; border-radius: 8px; padding: 8px 0px; font-size: 14px;
+                }}
+                QPushButton:pressed {{
+                    background: {pressed};
+                    border: 2px inset {pressed};
+                }}
+            """)
+        self.start_btn.clicked.connect(self._on_start_sniffing)
+        self.pause_btn.clicked.connect(self._on_pause_sniffing)
+        self.stop_btn.clicked.connect(self._on_stop_sniffing)
+
+        # Inicjalizacja backendu/orchestratora
+        self._sniffing = False
+        self._orchestrator = None
+        self._packet_counter = 0
+
+        # Timer do cyklicznego pobierania pakietów
+        from PyQt5.QtCore import QTimer
+        self._event_timer = QTimer(self)
+        self._event_timer.timeout.connect(self._process_new_packets)
+        self._event_timer.start(100)
+
+
+    def _init_db(self):
+        self._conn = sqlite3.connect(self._db_path)
+        c = self._conn.cursor()
+        c.execute('''CREATE TABLE IF NOT EXISTS packets (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            pkt_id INTEGER,
+            czas TEXT,
+            src TEXT,
+            dst TEXT,
+            proto TEXT,
+            size TEXT,
+            ai_weight TEXT,
+            geo TEXT
+        )''')
+        self._conn.commit()
+
+    def _save_packet_to_db(self, pkt_id, czas, src, dst, proto, size, ai_weight, geo):
+        c = self._conn.cursor()
+        c.execute("INSERT INTO packets (pkt_id, czas, src, dst, proto, size, ai_weight, geo) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                  (pkt_id, czas, src, dst, proto, size, ai_weight, geo))
+        self._conn.commit()
+
+    def _load_recent_packets(self, limit=300, offset=0):
+        self._db_offset = 0
+        c = self._conn.cursor()
+        c.execute("SELECT pkt_id, czas, src, dst, proto, size, ai_weight, geo FROM packets ORDER BY id DESC LIMIT ? OFFSET ?", (limit, offset))
+        rows = c.fetchall()
+        self.packets.setRowCount(0)
+        for row in rows:
+            self._add_packet_from_db(*row)
+        self._db_offset = len(rows)
+
+    def _load_more_packets(self, limit=300):
+        c = self._conn.cursor()
+        c.execute("SELECT pkt_id, czas, src, dst, proto, size, ai_weight, geo FROM packets ORDER BY id DESC LIMIT ? OFFSET ?", (limit, self._db_offset))
+        rows = c.fetchall()
+        for row in rows:
+            self._add_packet_from_db(*row)
+        self._db_offset += len(rows)
+
+    def _add_packet_from_db(self, pkt_id, czas, src, dst, proto, size, ai_weight, geo):
+        row = self.packets.rowCount()
+        self.packets.insertRow(row)
+        self.packets.setItem(row, 0, QTableWidgetItem(str(pkt_id)))
+        self.packets.setItem(row, 1, QTableWidgetItem(str(czas)))
+        self.packets.setItem(row, 2, QTableWidgetItem(str(src)))
+        self.packets.setItem(row, 3, QTableWidgetItem(str(dst)))
+        self.packets.setItem(row, 4, QTableWidgetItem(str(proto)))
+        self.packets.setItem(row, 5, QTableWidgetItem(str(size)))
+        self.packets.setItem(row, 6, QTableWidgetItem(str(ai_weight)))
+        self.packets.setItem(row, 7, QTableWidgetItem(str(geo)))
+        # Kolorowanie jak dotychczas
+        try:
+            w = float(ai_weight)
+            from PyQt5.QtGui import QColor
+            if w < 0.5:
+                color = QColor(0, 200, 0, 60)
+            elif w < 1.5:
+                color = QColor(255, 255, 0, 60)
+            else:
+                color = QColor(255, 0, 0, 80)
+            for col in range(self.packets.columnCount()):
+                item = self.packets.item(row, col)
+                if item:
+                    item.setBackground(color)
+        except Exception:
+            pass
+
     def _process_new_packets(self):
         # Pobiera nowe pakiety z CaptureModule, analizuje AI i wyświetla w tabeli.
         if not self._sniffing:
@@ -56,13 +365,11 @@ class DashboardTab(QWidget):
                 self._add_packet(self._packet_counter, pkt_bytes, meta)
 
     def _add_packet(self, pkt_id, pkt_bytes, meta):
-        # Dodaje pakiet do tabeli i do self._packet_data, koloruje według ai_weight
         from datetime import datetime
         from PyQt5.QtGui import QColor
         self._packet_data.append((pkt_id, pkt_bytes, meta))
         row = 0
         self.packets.insertRow(row)
-        # Kolumny: ID, Czas, Źródło, Cel, Protokół, Rozmiar (B), Waga AI
         czas = datetime.now().strftime('%H:%M:%S')
         src = meta.get('src_ip', '')
         dst = meta.get('dst_ip', '')
@@ -74,6 +381,7 @@ class DashboardTab(QWidget):
             proto = str(proto_num)
         size = meta.get('payload_size', '')
         ai_weight = meta.get('ai_weight', '') if 'ai_weight' in meta else ''
+        geo = "-"
         self.packets.setItem(row, 0, QTableWidgetItem(str(pkt_id)))
         self.packets.setItem(row, 1, QTableWidgetItem(str(czas)))
         self.packets.setItem(row, 2, QTableWidgetItem(str(src)))
@@ -81,15 +389,23 @@ class DashboardTab(QWidget):
         self.packets.setItem(row, 4, QTableWidgetItem(str(proto)))
         self.packets.setItem(row, 5, QTableWidgetItem(str(size)))
         self.packets.setItem(row, 6, QTableWidgetItem(str(ai_weight)))
-        # Kolorowanie wiersza według ai_weight
+        self.packets.setItem(row, 7, QTableWidgetItem(str(geo)))
+        # Zapis do bazy
+        self._save_packet_to_db(pkt_id, czas, src, dst, proto, size, ai_weight, geo)
+        # Ogranicz liczbę wyświetlanych pakietów do 300 (reszta w bazie)
+        if self.packets.rowCount() > 300:
+            self.packets.removeRow(self.packets.rowCount() - 1)
+            if len(self._packet_data) > 300:
+                self._packet_data.pop()
+        # Kolorowanie jak dotychczas
         try:
             w = float(ai_weight)
             if w < 0.5:
-                color = QColor(0, 200, 0, 60)  # zielony
+                color = QColor(0, 200, 0, 60)
             elif w < 1.5:
-                color = QColor(255, 255, 0, 60)  # żółty
+                color = QColor(255, 255, 0, 60)
             else:
-                color = QColor(255, 0, 0, 80)  # czerwony
+                color = QColor(255, 0, 0, 80)
             for col in range(self.packets.columnCount()):
                 item = self.packets.item(row, col)
                 if item:
@@ -139,399 +455,9 @@ class DashboardTab(QWidget):
             for k, v in meta.items():
                 details.append(f"{k}: {v}")
             self.detail_info.setText("\n".join(details))
-            # HEX
-
-    def __init__(self):
-        super().__init__()
-        self._capture = None
-
-        main_layout = QVBoxLayout()
-        title = QLabel("AI Network Packet Analyzer Pro - Dashboard")
-        title.setStyleSheet("font-size: 20px; font-weight: bold; margin-bottom: 10px;")
-        main_layout.addWidget(title)
-        main_layout.addSpacing(10)
-
-        # Wiersz: wybór interfejsu
-        from modules.netif_pretty import get_interfaces_pretty
-        iface_row = QHBoxLayout()
-        iface_label = QLabel("Interfejs:")
-        self.iface_combo = QComboBox()
-        self._iface_map = {}
-        for name, pretty in get_interfaces_pretty():
-            self.iface_combo.addItem(pretty)
-            self._iface_map[pretty] = name
-        iface_row.addWidget(iface_label)
-        iface_row.addWidget(self.iface_combo)
-        iface_row.addStretch()
-        main_layout.addLayout(iface_row)
-
-        # Wiersz: testowanie, wybór interfejsu i filtrów
-        test_row = QHBoxLayout()
-        self.test_ifaces_btn = QPushButton("Testuj interfejsy")
-        self.test_ifaces_btn.setStyleSheet("""
-            QPushButton {
-                background: #1976D2; color: white; font-weight: bold; border-radius: 6px; padding: 6px 8px;
-            }
-            QPushButton:pressed {
-                background: #0D47A1;
-                border: 2px inset #0D47A1;
-            }
-        """)
-        self.test_ifaces_btn.clicked.connect(self._test_interfaces)
-        test_row.addWidget(self.test_ifaces_btn)
-
-        self.use_iface_btn = QPushButton("Użyj wybrany interfejs")
-        self.use_iface_btn.setStyleSheet("""
-            QPushButton {
-                background: #388E3C; color: white; font-weight: bold; border-radius: 6px; padding: 6px 8px;
-            }
-            QPushButton:pressed {
-                background: #1B5E20;
-                border: 2px inset #1B5E20;
-            }
-        """)
-        self.use_iface_btn.clicked.connect(self._use_selected_interface)
-        test_row.addWidget(self.use_iface_btn)
-
-        # --- FILTR BPF ---
-        self.filter_combo = QComboBox()
-        self.filter_combo.setEditable(True)
-        self.filter_combo.setInsertPolicy(QComboBox.NoInsert)
-        self.filter_combo.setPlaceholderText("np. tcp, udp, port 80, host 192.168.1.1")
-        # Przykładowe filtry
-        self.filter_combo.addItem("Nie filtruj (wszystkie pakiety)") # pusty filtr
-        self.filter_combo.addItem("tcp")
-        self.filter_combo.addItem("udp")
-        self.filter_combo.addItem("port 80")
-        self.filter_combo.addItem("host 192.168.1.1")
-        self.filter_combo.addItem("icmp")
-        self.filter_combo.addItem("tcp port 443")
-        self.filter_combo.addItem("udp port 53")
-        self.filter_combo.setCurrentIndex(0)
-        test_row.addWidget(QLabel("Filtr (BPF):"))
-        test_row.addWidget(self.filter_combo)
-        self.filter_combo.lineEdit().editingFinished.connect(self._on_filter_edit_changed)
-        self.filter_combo.currentIndexChanged.connect(self._on_filter_combo_changed)
-        test_row.addStretch()
-        main_layout.addLayout(test_row)
-
-        # Wiersz: przyciski sniffingu
-        btn_row = QHBoxLayout()
-        self.start_btn = QPushButton("Start")
-        self.pause_btn = QPushButton("Pauza")
-        self.stop_btn = QPushButton("Stop")
-        for btn, color, pressed in [
-            (self.start_btn, '#4CAF50', '#087f23'),
-            (self.pause_btn, '#FFC107', '#b28704'),
-            (self.stop_btn, '#F44336', '#b71c1c')]:
-            btn.setFixedWidth(100)
-            btn.setStyleSheet(f"""
-                QPushButton {{
-                    font-weight: bold; background: {color}; color: white; border-radius: 8px; padding: 8px 0px; font-size: 14px;
-                }}
-                QPushButton:pressed {{
-                    background: {pressed};
-                    border: 2px inset {pressed};
-                }}
-            """)
-        btn_row.addWidget(self.start_btn)
-        btn_row.addWidget(self.pause_btn)
-        btn_row.addWidget(self.stop_btn)
-        btn_row.addStretch()
-        main_layout.addLayout(btn_row)
-
-        # Przechwycone pakiety + panel szczegółów (QSplitter)
-        from PyQt5.QtCore import Qt
-        splitter = QSplitter(Qt.Horizontal)
-
-        # Lewa: tabela pakietów
-        pkt_group = QGroupBox("Przechwycone pakiety")
-        pkt_group_layout = QVBoxLayout()
-        self.packets = QTableWidget(0, 7)
-        self.packets.setHorizontalHeaderLabels([
-            "ID", "Czas", "Źródło", "Cel", "Protokół", "Rozmiar (B)", "Waga AI"
-        ])
-        self.packets.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.packets.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.packets.verticalHeader().setVisible(False)
-        self.packets.setAlternatingRowColors(True)
-        self.packets.setStyleSheet("QTableWidget {{selection-background-color: #2196F3;}}")
-        self.packets.cellClicked.connect(self._show_packet_details_inline)
-        pkt_group_layout.addWidget(self.packets)
-        pkt_group.setLayout(pkt_group_layout)
-        splitter.addWidget(pkt_group)
-
-        # Prawa: panel szczegółów pakietu
-        details_widget = QWidget()
-        details_layout = QVBoxLayout()
-        details_layout.addWidget(QLabel("Szczegóły pakietu:"))
-        self.detail_info = QTextEdit()
-        self.detail_info.setReadOnly(True)
-        self.detail_info.setPlaceholderText("Wybierz pakiet, aby zobaczyć szczegóły...")
-        details_layout.addWidget(self.detail_info)
-        details_layout.addWidget(QLabel("HEX:"))
-        self.hex_view = QTextEdit()
-        self.hex_view.setReadOnly(True)
-        self.hex_view.setMaximumHeight(100)
-        details_layout.addWidget(self.hex_view)
-        details_layout.addWidget(QLabel("ASCII:"))
-        self.ascii_view = QTextEdit()
-        self.ascii_view.setReadOnly(True)
-        self.ascii_view.setMaximumHeight(100)
-        details_layout.addWidget(self.ascii_view)
-        details_widget.setLayout(details_layout)
-        splitter.addWidget(details_widget)
-        splitter.setSizes([700, 300])
-        main_layout.addWidget(splitter, stretch=1)
-
-        # Dolna belka/log panel
-        self.status_log = QTextEdit()
-        self.status_log.setReadOnly(True)
-        self.status_log.setMaximumHeight(60)
-        self.status_log.setStyleSheet("background: #222; color: #fff; font-family: Consolas, monospace; font-size: 12px; border-radius: 6px; padding: 4px;")
-        main_layout.addWidget(self.status_log)
-
-        self._packet_data = []
-        self.setLayout(main_layout)
-
-        # Połącz przyciski z metodami
-        self.start_btn.clicked.connect(self._on_start_sniffing)
-        self.pause_btn.clicked.connect(self._on_pause_sniffing)
-        self.stop_btn.clicked.connect(self._on_stop_sniffing)
-
-        # Inicjalizacja backendu/orchestratora
-        self._sniffing = False
-        self._orchestrator = None
-        self._packet_counter = 0
-
-        # Timer do cyklicznego pobierania pakietów
-        from PyQt5.QtCore import QTimer
-        self._event_timer = QTimer(self)
-        self._event_timer.timeout.connect(self._process_new_packets)
-        self._event_timer.start(100)
-        cfg_path = "config/config.yaml"
-        try:
-            with open(cfg_path, 'r', encoding='utf-8') as f:
-                cfg = yaml.safe_load(f)
-        except Exception:
-            cfg = {}
-    # (usunięto powielony fragment z bpf)
-
-        # Wiersz: przyciski sniffingu
-        btn_row = QHBoxLayout()
-        self.start_btn = QPushButton("Start")
-        self.pause_btn = QPushButton("Pauza")
-        self.stop_btn = QPushButton("Stop")
-        for btn, color, pressed in [
-            (self.start_btn, '#4CAF50', '#087f23'),
-            (self.pause_btn, '#FFC107', '#b28704'),
-            (self.stop_btn, '#F44336', '#b71c1c')]:
-            btn.setFixedWidth(100)
-            btn.setStyleSheet(f"""
-                QPushButton {{
-                    font-weight: bold; background: {color}; color: white; border-radius: 8px; padding: 8px 0px; font-size: 14px;
-                }}
-                QPushButton:pressed {{
-                    background: {pressed};
-                    border: 2px inset {pressed};
-                }}
-            """)
-    # ...wszystko to jest już w __init__...
-        self.start_btn.clicked.connect(self._on_start_sniffing)
-        self.pause_btn.clicked.connect(self._on_pause_sniffing)
-        self.stop_btn.clicked.connect(self._on_stop_sniffing)
-
-        # Inicjalizacja backendu/orchestratora
-        self._sniffing = False
-        self._orchestrator = None
-        self._packet_counter = 0
-
-        # Timer do cyklicznego pobierania pakietów
-        from PyQt5.QtCore import QTimer
-        self._event_timer = QTimer(self)
-        self._event_timer.timeout.connect(self._process_new_packets)
-        self._event_timer.start(100)
-
-
-    def _use_selected_interface(self):
-        pretty = self.iface_combo.currentText()
-        iface = self._iface_map.get(pretty)
-        if iface:
-            try:
-                from core.orchestrator import Orchestrator
-                if not self._orchestrator:
-                    orchestrator = Orchestrator()
-                    orchestrator.initialize()
-                    self._orchestrator = orchestrator
-                else:
-                    orchestrator = self._orchestrator
-                # Znajdź CaptureModule i ustaw interfejs
-                for m in orchestrator.modules:
-                    if m.__class__.__name__ == "CaptureModule":
-                        m.set_interface(iface)
-                        self._capture = m
-                        break
-                self.log_status(f"Ustawiono interfejs: {pretty}")
-            except Exception as e:
-                from PyQt5.QtWidgets import QMessageBox
-                QMessageBox.warning(self, "Błąd", f"Nie udało się ustawić interfejsu: {e}")
-                self.log_status(f"Błąd: nie udało się ustawić interfejsu: {e}")
-        else:
-            from PyQt5.QtWidgets import QMessageBox
-            QMessageBox.warning(self, "Błąd", "Nie wybrano poprawnego interfejsu!")
-            self.log_status("Błąd: nie wybrano poprawnego interfejsu!")
-
-
-    def _test_interfaces(self):
-        from modules.capture import CaptureModule
-        results = CaptureModule().test_all_interfaces()
-        msg = "Wyniki testu interfejsów:\n"
-        for iface, res in results.items():
-            msg += f"{iface}: {res}\n"
-        from PyQt5.QtWidgets import QMessageBox
-        QMessageBox.information(self, "Test interfejsów", msg)
-        self.log_status("Wykonano test interfejsów.")
-
-    def _on_start_sniffing(self):
-        pretty = self.iface_combo.currentText()
-        iface = self._iface_map.get(pretty)
-        if iface:
-            try:
-                from core.orchestrator import Orchestrator
-                if not self._orchestrator:
-                    orchestrator = Orchestrator()
-                    orchestrator.initialize()
-                    self._orchestrator = orchestrator
-                else:
-                    orchestrator = self._orchestrator
-                # Znajdź CaptureModule i ustaw interfejs
-                for m in orchestrator.modules:
-                    if m.__class__.__name__ == "CaptureModule":
-                        m.set_interface(iface)
-                        self._capture = m
-                        break
-                self._sniffing = True
-                self.log_status(f"Sniffing uruchomiony na interfejsie: {pretty}")
-            except Exception as e:
-                from PyQt5.QtWidgets import QMessageBox
-                QMessageBox.warning(self, "Błąd", f"Nie udało się ustawić interfejsu: {e}")
-                self.log_status(f"Błąd: nie udało się ustawić interfejsu: {e}")
-        else:
-            from PyQt5.QtWidgets import QMessageBox
-            QMessageBox.warning(self, "Błąd", "Nie wybrano poprawnego interfejsu!")
-            self.log_status("Błąd: nie wybrano poprawnego interfejsu!")
-
-    def _on_pause_sniffing(self):
-        if self._sniffing:
-            self._sniffing = False
-            self.log_status("Sniffing wstrzymany.")
-
-    def _on_stop_sniffing(self):
-        if self._sniffing:
-            self._sniffing = False
-            self.log_status("Sniffing zatrzymany.")
-
-    def log_status(self, msg):
-        from datetime import datetime
-        ts = datetime.now().strftime('%H:%M:%S')
-        self.status_log.append(f"[{ts}] {msg}")
-
-    # ...existing code...
-
-    def _show_packet_details_inline(self, row, col):
-        idx = row
-        if 0 <= idx < len(self._packet_data):
-            pkt_id, pkt_bytes, meta = self._packet_data[idx]
-            # Szczegóły pakietu w stylu Wireshark
-            details = []
-            # Warstwa łącza (Ethernet)
-            eth_src = meta.get('eth_src')
-            eth_dst = meta.get('eth_dst')
-            eth_type = meta.get('eth_type')
-            if eth_src or eth_dst or eth_type:
-                details.append('[Ethernet]')
-                if eth_src: details.append(f'  MAC źródłowy: {eth_src}')
-                if eth_dst: details.append(f'  MAC docelowy: {eth_dst}')
-                if eth_type: details.append(f'  Typ ramki: {eth_type}')
-
-            # Warstwa sieciowa (IP)
-            ip_src = meta.get('src_ip')
-            ip_dst = meta.get('dst_ip')
-            ip_ver = meta.get('ip_version')
-            ttl = meta.get('ttl')
-            ip_id = meta.get('ip_id')
-            ip_flags = meta.get('ip_flags')
-            if ip_src or ip_dst or ip_ver or ttl or ip_id or ip_flags:
-                details.append('[IP]')
-                if ip_ver: details.append(f'  Wersja: {ip_ver}')
-                if ip_src: details.append(f'  IP źródłowy: {ip_src}')
-                if ip_dst: details.append(f'  IP docelowy: {ip_dst}')
-                if ttl: details.append(f'  TTL: {ttl}')
-                if ip_id: details.append(f'  ID: {ip_id}')
-                if ip_flags: details.append(f'  Flagi: {ip_flags}')
-
-            # Warstwa transportowa (TCP/UDP/ICMP)
-            proto = meta.get('protocol')
-            src_port = meta.get('src_port')
-            dst_port = meta.get('dst_port')
-            tcp_flags = meta.get('tcp_flags')
-            seq = meta.get('tcp_seq')
-            ack = meta.get('tcp_ack')
-            win = meta.get('tcp_win')
-            icmp_type = meta.get('icmp_type')
-            icmp_code = meta.get('icmp_code')
-            if proto:
-                details.append(f'[Transport: {proto}]')
-                if src_port: details.append(f'  Port źródłowy: {src_port}')
-                if dst_port: details.append(f'  Port docelowy: {dst_port}')
-                if tcp_flags: details.append(f'  Flagi TCP: {tcp_flags}')
-                if seq: details.append(f'  SEQ: {seq}')
-                if ack: details.append(f'  ACK: {ack}')
-                if win: details.append(f'  Okno: {win}')
-                if icmp_type: details.append(f'  ICMP typ: {icmp_type}')
-                if icmp_code: details.append(f'  ICMP kod: {icmp_code}')
-
-            # Warstwa aplikacyjna (np. HTTP, DNS)
-            app_proto = meta.get('app_proto')
-            http_method = meta.get('http_method')
-            http_host = meta.get('http_host')
-            http_url = meta.get('http_url')
-            http_code = meta.get('http_code')
-            dns_query = meta.get('dns_query')
-            dns_resp = meta.get('dns_resp')
-            if app_proto:
-                details.append(f'[Aplikacja: {app_proto}]')
-                if http_method: details.append(f'  HTTP metoda: {http_method}')
-                if http_host: details.append(f'  HTTP host: {http_host}')
-                if http_url: details.append(f'  HTTP URL: {http_url}')
-                if http_code: details.append(f'  HTTP kod: {http_code}')
-                if dns_query: details.append(f'  DNS zapytanie: {dns_query}')
-                if dns_resp: details.append(f'  DNS odpowiedź: {dns_resp}')
-
-            # AI/Status
-            ai_status = meta.get('ai_status')
-            ai_weight = meta.get('ai_weight')
-            if ai_status or ai_weight:
-                details.append('[AI/Security]')
-                if ai_status: details.append(f'  Status AI: {ai_status}')
-                if ai_weight: details.append(f'  Waga AI: {ai_weight}')
-
-            # Ogólne
-            details.append('[Ogólne]')
-            details.append(f'  ID pakietu: {pkt_id}')
-            details.append(f'  Rozmiar: {len(pkt_bytes)} B')
-            ts = meta.get('timestamp')
-            if ts: details.append(f'  Czas: {ts}')
-            iface = meta.get('iface')
-            if iface: details.append(f'  Interfejs: {iface}')
-
-            self.detail_info.setText("\n".join(details))
-            # HEX
-            hex_data = self._format_hex(pkt_bytes)
-            self.hex_view.setText(hex_data)
-            # ASCII
-            ascii_data = self._format_ascii(pkt_bytes)
-            self.ascii_view.setText(ascii_data)
+            # HEX i ASCII
+            self.hex_view.setText(self._format_hex(pkt_bytes))
+            self.ascii_view.setText(self._format_ascii(pkt_bytes))
 
     def _format_hex(self, pkt_bytes):
         # HEX dump (16 bajtów na linię)
@@ -550,6 +476,20 @@ class DashboardTab(QWidget):
             asciistr = ''.join(chr(b) if 32 <= b < 127 else '.' for b in chunk)
             lines.append(asciistr)
         return '\n'.join(lines)
+
+    def _on_start_sniffing(self):
+        self._sniffing = True
+        self.log_status("Sniffing uruchomiony.")
+
+    def _on_pause_sniffing(self):
+        if self._sniffing:
+            self._sniffing = False
+            self.log_status("Sniffing wstrzymany.")
+
+    def _on_stop_sniffing(self):
+        if self._sniffing:
+            self._sniffing = False
+            self.log_status("Sniffing zatrzymany.")
 
     # ...existing code...
 
@@ -748,11 +688,36 @@ from PyQt5.QtGui import QScreen
 
 print('qt_dashboard.py: przed MainWindow')
 class MainWindow(QMainWindow):
+    def _set_initial_window_size(self):
+        # Ustaw rozmiar okna na podstawie config.yaml lub domyślnie na 1200x800
+        import os
+        import yaml
+        cfg_path = os.path.join("config", "config.yaml")
+        width, height = 1200, 800
+        try:
+            with open(cfg_path, 'r', encoding='utf-8') as f:
+                cfg = yaml.safe_load(f)
+            w = cfg.get('window_width')
+            h = cfg.get('window_height')
+            if isinstance(w, int) and isinstance(h, int):
+                width, height = w, h
+        except Exception:
+            pass
+        self.resize(width, height)
     def __init__(self):
         super().__init__()
         self.setWindowTitle("AI Network Packet Analyzer Pro")
         self.tabs = QTabWidget()
+        from core.orchestrator import Orchestrator
+        orchestrator = Orchestrator()
+        orchestrator.initialize()
+        capture = None
+        for m in orchestrator.modules:
+            if m.__class__.__name__ == "CaptureModule":
+                capture = m
+                break
         self.dashboard = DashboardTab()
+        self.dashboard._capture = capture
         self.devices = DevicesTab()
         self.scanner = ScannerTab()
         self.config = ConfigTab(main_window=self)
@@ -846,28 +811,4 @@ class MainWindow(QMainWindow):
         if self._sniffing:
             self._paused = not self._paused
 
-    def _stop_sniffing(self):
-        self._sniffing = False
-        self._paused = False
-
-    def _set_initial_window_size(self):
-        # Domyślne wartości
-        width, height = None, None
-        try:
-            with open('config/config.yaml', 'r', encoding='utf-8') as f:
-                cfg = yaml.safe_load(f)
-            width = cfg.get('window_width')
-            height = cfg.get('window_height')
-        except Exception:
-            pass
-        if not width or not height:
-            # Pobierz rozdzielczość głównego ekranu
-            screen = QApplication.primaryScreen()
-            size = screen.size()
-            width = int(size.width() * 0.8)
-            height = int(size.height() * 0.8)
-        self.resize(width, height)
-
-    def run_scan(self):
-        self.scanner.results.addItem("[DEMO] Wynik skanowania...")
 

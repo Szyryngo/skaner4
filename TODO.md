@@ -1,13 +1,17 @@
 
+
 # TODO – AI Network Packet Analyzer Pro
 
 ## Stan na sierpień 2025
 - [x] Dashboard PyQt5: oddzielne przyciski, wybór interfejsu, dolna belka logów, panel szczegółów, pole filtra BPF
-- [x] Przechwytywanie pakietów, dynamiczna tabela, panel szczegółów, HEX/ASCII
+- [x] Przechwytywanie pakietów, dynamiczna tabela, panel szczegółów, HEX/ASCII (po kliknięciu wiersza wyświetla się HEX/ASCII)
 - [x] Integracja orchestratora z GUI, cykliczne pobieranie pakietów (QTimer)
 - [x] AI: każdemu pakietowi przypisywana jest waga (ai_weight), kolorowanie wierszy
 - [x] Wyświetlanie protokołu jako nazwa (TCP/UDP/ICMP)
 - [x] Nowe pakiety pojawiają się na górze tabeli
+- [x] Naprawa wcięć, usunięcie powielonych konstruktorów, stabilność dashboardu
+- [x] Automatyczne ustawianie rozmiaru okna (config.yaml lub domyślnie)
+- [x] Uzupełniono dokumentację qtui/qt_dashboard.py (patrz qt_dashboard.py.docstring.txt)
 
 ## Najbliższe zadania
 - [ ] Usprawnić przepływ eventów AI (każdy pakiet → cechy → AI → waga)
