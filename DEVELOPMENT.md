@@ -28,8 +28,8 @@ Zawiera opis wszystkich modułów i kroków, jakie trzeba wykonać.
 
 ### **modules/detection.py**
 - Odbiera `NEW_FEATURES`.
-- AI detection + klasyfikacja.
-- Publikuje `NEW_THREAT`.
+- Prawdziwa analiza AI: IsolationForest (scikit-learn), automatyczne ładowanie/trenowanie modelu.
+- Generuje event `NEW_THREAT` tylko przy wykryciu anomalii przez AI.
 
 ### **modules/scanner.py**
 - Ręczne skanowanie sieci.
@@ -40,6 +40,7 @@ Zawiera opis wszystkich modułów i kroków, jakie trzeba wykonać.
 ### **modules/devices.py**
 - Śledzenie urządzeń w LAN z pakietów ARP/IP.
 - Publikuje `DEVICE_DETECTED`.
+- Logowanie w konsoli każdego odebranego pakietu i wykrycia nowego urządzenia (diagnostyka eventów).
 
 ### **modules/optimizer.py**
 - Analiza zasobów hosta (CPU, RAM).
@@ -49,6 +50,8 @@ Zawiera opis wszystkich modułów i kroków, jakie trzeba wykonać.
 
 ### **qtui/qt_dashboard.py**
 - Natywny GUI PyQt5 – dashboard, zakładki (alerty, urządzenia, skaner, konfiguracja).
+- Protokół w tabeli pakietów wyświetlany jako czytelna nazwa (TCP/UDP/ICMP).
+- Live Devices aktualizowane automatycznie po wykryciu urządzenia (event DEVICE_DETECTED).
 
 ---
 

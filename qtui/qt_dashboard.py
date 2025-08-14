@@ -1,43 +1,352 @@
 import sys
-from PyQt5.QtWidgets import QApplication, QMainWindow, QTabWidget, QWidget, QVBoxLayout, QLabel, QPushButton, QListWidget
+from PyQt5.QtWidgets import QApplication, QMainWindow, QTabWidget, QWidget, QVBoxLayout, QLabel, QPushButton, QListWidget, QGroupBox, QTableWidget, QTableWidgetItem, QAbstractItemView
 import threading
+
+from PyQt5.QtWidgets import QPushButton, QDialog, QTextEdit, QHBoxLayout
+
+class PacketDetailDialog(QDialog):
+    def __init__(self, pkt_id, hex_data, ascii_data, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle(f"Szczegóły pakietu ID {pkt_id}")
+        layout = QVBoxLayout()
+        layout.addWidget(QLabel("HEX:"))
+        hex_view = QTextEdit()
+        hex_view.setReadOnly(True)
+        hex_view.setText(hex_data)
+        layout.addWidget(hex_view)
+        layout.addWidget(QLabel("ASCII:"))
+        ascii_view = QTextEdit()
+        ascii_view.setReadOnly(True)
+        ascii_view.setText(ascii_data)
+        layout.addWidget(ascii_view)
+        self.setLayout(layout)
 
 class DashboardTab(QWidget):
     def __init__(self):
         super().__init__()
         layout = QVBoxLayout()
-        layout.addWidget(QLabel("AI Network Packet Analyzer Pro - Dashboard"))
+        title = QLabel("AI Network Packet Analyzer Pro - Dashboard")
+        title.setStyleSheet("font-size: 20px; font-weight: bold; margin-bottom: 10px;")
+        layout.addWidget(title)
+        layout.addSpacing(10)
+
+        # Przyciski sterujące sniffingiem
+        btn_layout = QHBoxLayout()
+        self.start_btn = QPushButton("Start")
+        self.pause_btn = QPushButton("Pauza")
+        self.stop_btn = QPushButton("Stop")
+        for btn, color in [
+            (self.start_btn, '#4CAF50'),
+            (self.pause_btn, '#FFC107'),
+            (self.stop_btn, '#F44336')]:
+            btn.setFixedWidth(90)
+            btn.setStyleSheet(f"font-weight: bold; background: {color}; color: white; border-radius: 6px; padding: 6px 0px;")
+        btn_layout.addStretch()
+        btn_layout.addWidget(self.start_btn)
+        btn_layout.addWidget(self.pause_btn)
+        btn_layout.addWidget(self.stop_btn)
+        btn_layout.addStretch()
+        layout.addLayout(btn_layout)
+
+        # Lista przechwyconych pakietów
+        from PyQt5.QtWidgets import QTableWidget, QTableWidgetItem, QAbstractItemView
+        pkt_group = QGroupBox("Przechwycone pakiety")
+        pkt_layout = QVBoxLayout()
+        self.packets = QTableWidget(0, 6)
+        self.packets.setHorizontalHeaderLabels([
+            "ID", "Czas", "Źródło", "Cel", "Protokół", "Rozmiar (B)"
+        ])
+        self.packets.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.packets.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.packets.verticalHeader().setVisible(False)
+        self.packets.setAlternatingRowColors(True)
+        self.packets.setStyleSheet("QTableWidget {selection-background-color: #2196F3;}")
+        pkt_layout.addWidget(self.packets)
+        pkt_group.setLayout(pkt_layout)
+        layout.addWidget(pkt_group)
+
+        # Obsługa kliknięcia w pakiet
+        self.packets.cellDoubleClicked.connect(self._show_packet_details)
+
+        # Wykryte zagrożenia (jak dotychczas)
+        group = QGroupBox("Wykryte zagrożenia")
+        group_layout = QVBoxLayout()
         self.threats = QListWidget()
-        layout.addWidget(QLabel("Wykryte zagrożenia:"))
-        layout.addWidget(self.threats)
+        group_layout.addWidget(self.threats)
+        group.setLayout(group_layout)
+        layout.addWidget(group)
+        layout.addStretch()
+        # Bufor na pakiety (id, dane)
+        self._packet_data = []
         self.setLayout(layout)
+
+    def add_packet(self, pkt_id, pkt_bytes, meta=None):
+        # Dodaj pakiet na początek tabeli i bufora
+        if meta is None:
+            meta = {}
+        self._packet_data.insert(0, (pkt_id, pkt_bytes, meta))
+        self.packets.insertRow(0)
+        # Kolumny: ID, czas, src, dst, protokół, rozmiar
+        src = meta.get('src_ip', '-')
+        dst = meta.get('dst_ip', '-')
+        proto = meta.get('protocol', '-')
+        # Zamiana numeru protokołu na nazwę
+        proto_map = {
+            1: 'ICMP',
+            6: 'TCP',
+            17: 'UDP',
+            '1': 'ICMP',
+            '6': 'TCP',
+            '17': 'UDP',
+            'ICMP': 'ICMP',
+            'TCP': 'TCP',
+            'UDP': 'UDP',
+        }
+        if isinstance(proto, int) or (isinstance(proto, str) and proto.isdigit()):
+            proto_str = proto_map.get(int(proto), str(proto))
+        else:
+            proto_str = proto_map.get(proto, str(proto))
+        size = meta.get('payload_size', len(pkt_bytes))
+        ts = meta.get('timestamp', '-')
+        ai_status = meta.get('ai_status', 'safe')
+        row = [
+            str(pkt_id), str(ts), str(src), str(dst), proto_str, str(size)
+        ]
+        for col, val in enumerate(row):
+            item = QTableWidgetItem(val)
+            self.packets.setItem(0, col, item)
+        # Kolorowanie wiersza na podstawie ai_status
+        color = None
+        if ai_status == 'threat':
+            color = '#FFCDD2'  # czerwony
+        elif ai_status == 'suspicious':
+            color = '#FFF9C4'  # żółty
+        elif ai_status == 'safe':
+            color = '#C8E6C9'  # zielony
+        if color:
+            from PyQt5.QtGui import QColor
+            qcolor = QColor(color)
+            for col in range(self.packets.columnCount()):
+                item = self.packets.item(0, col)
+                if item:
+                    item.setBackground(qcolor)
+        # Ogranicz liczbę pakietów na liście (np. 1000)
+        if self.packets.rowCount() > 1000:
+            self.packets.removeRow(self.packets.rowCount()-1)
+            self._packet_data = self._packet_data[:1000]
+
+    # _packet_desc niepotrzebny
+
+    # _short_packet niepotrzebny
+
+    def _show_packet_details(self, row, col):
+        idx = row
+        if 0 <= idx < len(self._packet_data):
+            pkt_id, pkt_bytes, meta = self._packet_data[idx]
+            hex_data = self._format_hex(pkt_bytes)
+            ascii_data = self._format_ascii(pkt_bytes)
+            dlg = PacketDetailDialog(pkt_id, hex_data, ascii_data, self)
+            dlg.exec_()
+
+    def _format_hex(self, pkt_bytes):
+        # HEX dump (16 bajtów na linię)
+        lines = []
+        for i in range(0, len(pkt_bytes), 16):
+            chunk = pkt_bytes[i:i+16]
+            hexstr = ' '.join(f"{b:02X}" for b in chunk)
+            lines.append(hexstr)
+        return '\n'.join(lines)
+
+    def _format_ascii(self, pkt_bytes):
+        # ASCII dump (nieczytelne znaki jako .)
+        lines = []
+        for i in range(0, len(pkt_bytes), 16):
+            chunk = pkt_bytes[i:i+16]
+            asciistr = ''.join(chr(b) if 32 <= b < 127 else '.' for b in chunk)
+            lines.append(asciistr)
+        return '\n'.join(lines)
 
 class DevicesTab(QWidget):
     def __init__(self):
+        from PyQt5.QtWidgets import QTableWidget, QTableWidgetItem, QAbstractItemView
         super().__init__()
         layout = QVBoxLayout()
-        layout.addWidget(QLabel("Live Devices"))
-        self.devices = QListWidget()
-        layout.addWidget(self.devices)
+        title = QLabel("Live Devices")
+        title.setStyleSheet("font-size: 16px; font-weight: bold; margin-bottom: 10px;")
+        layout.addWidget(title)
+        group = QGroupBox("Aktywne urządzenia w sieci")
+        group_layout = QVBoxLayout()
+        self.devices = QTableWidget(0, 5)
+        self.devices.setHorizontalHeaderLabels([
+            "IP", "MAC", "Ostatnio widziany", "Pakiety", "Status"
+        ])
+        self.devices.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.devices.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.devices.verticalHeader().setVisible(False)
+        self.devices.setAlternatingRowColors(True)
+        self.devices.setStyleSheet("QTableWidget {selection-background-color: #2196F3;}")
+        group_layout.addWidget(self.devices)
+        group.setLayout(group_layout)
+        layout.addWidget(group)
+        layout.addStretch()
         self.setLayout(layout)
+
+        # Bufor: lista słowników z danymi urządzeń
+        self._device_data = []
+
+    def update_device(self, device_info):
+        # device_info: dict z polami ip, mac, last_seen, packets, status
+        # Szukaj po IP, aktualizuj lub dodaj na początek
+        ip = device_info.get('ip', '-')
+        idx = next((i for i, d in enumerate(self._device_data) if d.get('ip') == ip), None)
+        if idx is not None:
+            self._device_data.pop(idx)
+            self.devices.removeRow(idx)
+        self._device_data.insert(0, device_info)
+        self.devices.insertRow(0)
+        row = [
+            device_info.get('ip', '-'),
+            device_info.get('mac', '-'),
+            device_info.get('last_seen', '-'),
+            str(device_info.get('packets', '-')),
+            device_info.get('status', '-')
+        ]
+        for col, val in enumerate(row):
+            item = QTableWidgetItem(val)
+            self.devices.setItem(0, col, item)
+        # Kolorowanie statusu
+        color = None
+        status = device_info.get('status', 'online')
+        if status == 'threat':
+            color = '#FFCDD2'
+        elif status == 'suspicious':
+            color = '#FFF9C4'
+        elif status == 'online':
+            color = '#C8E6C9'
+        if color:
+            for col in range(self.devices.columnCount()):
+                self.devices.item(0, col).setBackgroundColor(color)
+        # Ogranicz do 500 urządzeń
+        if self.devices.rowCount() > 500:
+            self.devices.removeRow(self.devices.rowCount()-1)
+            self._device_data = self._device_data[:500]
 
 class ScannerTab(QWidget):
     def __init__(self):
         super().__init__()
         layout = QVBoxLayout()
-        layout.addWidget(QLabel("Network Scanner"))
+        title = QLabel("Network Scanner")
+        title.setStyleSheet("font-size: 16px; font-weight: bold; margin-bottom: 10px;")
+        layout.addWidget(title)
+        group = QGroupBox("Skanowanie sieci")
+        group_layout = QVBoxLayout()
         self.scan_btn = QPushButton("Uruchom skanowanie")
-        layout.addWidget(self.scan_btn)
+        group_layout.addWidget(self.scan_btn)
         self.results = QListWidget()
-        layout.addWidget(self.results)
+        group_layout.addWidget(self.results)
+        group.setLayout(group_layout)
+        layout.addWidget(group)
+        layout.addStretch()
         self.setLayout(layout)
 
+
+from PyQt5.QtWidgets import QHBoxLayout, QLineEdit, QMessageBox, QComboBox, QFormLayout
+
+
 class ConfigTab(QWidget):
-    def __init__(self):
+    PRESETS = [
+        ("800 x 600", 800, 600),
+        ("1024 x 768", 1024, 768),
+        ("1280 x 800", 1280, 800),
+        ("1366 x 768", 1366, 768),
+        ("1600 x 900", 1600, 900),
+        ("1920 x 1080", 1920, 1080),
+        ("2560 x 1440", 2560, 1440),
+        ("3840 x 2160", 3840, 2160),
+    ]
+    def __init__(self, main_window=None):
         super().__init__()
+        self.main_window = main_window
         layout = QVBoxLayout()
-        layout.addWidget(QLabel("Konfiguracja (do uzupełnienia)"))
+        title = QLabel("Konfiguracja okna GUI")
+        title.setStyleSheet("font-size: 16px; font-weight: bold; margin-bottom: 10px;")
+        layout.addWidget(title)
+
+        group = QGroupBox("Rozmiar okna")
+        form = QFormLayout()
+
+        self.preset_combo = QComboBox()
+        for label, w, h in self.PRESETS:
+            self.preset_combo.addItem(label, (w, h))
+        self.preset_combo.currentIndexChanged.connect(self._preset_selected)
+        form.addRow("Wybierz rozmiar:", self.preset_combo)
+
+        self.width_input = QLineEdit()
+        self.height_input = QLineEdit()
+        self.width_input.setMaximumWidth(80)
+        self.height_input.setMaximumWidth(80)
+        wh_box = QHBoxLayout()
+        wh_box.addWidget(QLabel("Szerokość:"))
+        wh_box.addWidget(self.width_input)
+        wh_box.addWidget(QLabel("Wysokość:"))
+        wh_box.addWidget(self.height_input)
+        wh_box.addStretch()
+        form.addRow("Ręcznie:", wh_box)
+
+        self.apply_btn = QPushButton("Zastosuj rozmiar okna")
+        form.addRow(self.apply_btn)
+        group.setLayout(form)
+        layout.addWidget(group)
+        layout.addStretch()
         self.setLayout(layout)
+
+        self._load_window_size()
+        self.apply_btn.clicked.connect(self._apply_window_size)
+
+    def _preset_selected(self, idx):
+        w, h = self.preset_combo.currentData()
+        self.width_input.setText(str(w))
+        self.height_input.setText(str(h))
+
+    def _load_window_size(self):
+        try:
+            with open('config/config.yaml', 'r', encoding='utf-8') as f:
+                cfg = yaml.safe_load(f)
+            width = cfg.get('window_width', '')
+            height = cfg.get('window_height', '')
+            self.width_input.setText(str(width))
+            self.height_input.setText(str(height))
+        except Exception:
+            self.width_input.setText('')
+            self.height_input.setText('')
+
+    def _apply_window_size(self):
+        try:
+            width = int(self.width_input.text())
+            height = int(self.height_input.text())
+            if width < 400 or height < 300:
+                raise ValueError("Minimalny rozmiar to 400x300")
+            with open('config/config.yaml', 'r', encoding='utf-8') as f:
+                cfg = yaml.safe_load(f)
+            cfg['window_width'] = width
+            cfg['window_height'] = height
+            with open('config/config.yaml', 'w', encoding='utf-8') as f:
+                yaml.safe_dump(cfg, f, allow_unicode=True)
+            if self.main_window:
+                self.main_window.resize(width, height)
+            QMessageBox.information(self, "Sukces", f"Nowy rozmiar okna: {width}x{height}")
+        except Exception as e:
+            QMessageBox.warning(self, "Błąd", f"Nieprawidłowe dane: {e}")
+
+
+
+import yaml
+import threading
+import queue
+from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtGui import QScreen
+
+
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -47,15 +356,111 @@ class MainWindow(QMainWindow):
         self.dashboard = DashboardTab()
         self.devices = DevicesTab()
         self.scanner = ScannerTab()
-        self.config = ConfigTab()
+        self.config = ConfigTab(main_window=self)
         self.tabs.addTab(self.dashboard, "Dashboard")
         self.tabs.addTab(self.devices, "Live Devices")
         self.tabs.addTab(self.scanner, "Network Scanner")
         self.tabs.addTab(self.config, "Configuration")
         self.setCentralWidget(self.tabs)
 
-        # Przykładowe podpięcie przycisku skanowania
-        self.scanner.scan_btn.clicked.connect(self.run_scan)
+        # Skalowanie okna do rozdzielczości ekranu lub config.yaml
+        self._set_initial_window_size()
+        self.setMinimumSize(800, 600)  # Minimalny rozmiar
+        self.setWindowFlag(Qt.Window)
+        self.setWindowState(Qt.WindowActive)
+
+        # Integracja orchestratora w osobnym wątku
+        self._event_queue = queue.Queue()
+        self._orchestrator_thread = threading.Thread(target=self._run_orchestrator, daemon=True)
+        self._orchestrator_thread.start()
+
+        # Timer do odbioru eventów z kolejki co 100ms
+        self._event_timer = QTimer()
+        self._event_timer.timeout.connect(self._process_events)
+        self._event_timer.start(100)
+
+        # Obsługa przycisków dashboardu
+        self.dashboard.start_btn.clicked.connect(self._start_sniffing)
+        self.dashboard.pause_btn.clicked.connect(self._pause_sniffing)
+        self.dashboard.stop_btn.clicked.connect(self._stop_sniffing)
+
+        # Stan sniffingu
+        self._sniffing = False
+        self._paused = False
+        self._packet_counter = 0
+
+    def _run_orchestrator(self):
+        # Import lokalny, by nie blokować GUI
+        from core.orchestrator import Orchestrator
+        orchestrator = Orchestrator()
+        orchestrator.initialize()
+        # Znajdź CaptureModule
+        capture = None
+        for m in orchestrator.modules:
+            if m.__class__.__name__ == "CaptureModule":
+                capture = m
+                break
+        # Przechwytuj pakiety tylko gdy _sniffing==True
+        while True:
+            if self._sniffing and not self._paused:
+                event = capture.generate_event()
+                if event and event.type == "NEW_PACKET":
+                    self._event_queue.put(event)
+            # Można dodać obsługę innych eventów
+            import time
+            time.sleep(0.01)
+
+    def _process_events(self):
+        # Odbierz eventy z kolejki i wyświetl w dashboardzie i devices
+        while not self._event_queue.empty():
+            event = self._event_queue.get()
+            if event.type == "NEW_PACKET":
+                pkt_bytes = event.data.get("raw_bytes")
+                if pkt_bytes:
+                    self._packet_counter += 1
+                    self.dashboard.add_packet(self._packet_counter, pkt_bytes, event.data)
+            elif event.type == "DEVICE_DETECTED":
+                # Przekaż dane do DevicesTab
+                ip = event.data.get('ip', '-')
+                # Uzupełnij o inne dane jeśli są dostępne
+                device_info = {
+                    'ip': ip,
+                    'mac': event.data.get('mac', '-'),
+                    'last_seen': event.data.get('last_seen', '-'),
+                    'packets': event.data.get('packets', 1),
+                    'status': event.data.get('status', 'online'),
+                }
+                self.devices.update_device(device_info)
+
+    def _start_sniffing(self):
+        self._sniffing = True
+        self._paused = False
+
+    def _pause_sniffing(self):
+        if self._sniffing:
+            self._paused = not self._paused
+
+    def _stop_sniffing(self):
+        self._sniffing = False
+        self._paused = False
+
+    def _set_initial_window_size(self):
+        # Domyślne wartości
+        width, height = None, None
+        try:
+            with open('config/config.yaml', 'r', encoding='utf-8') as f:
+                cfg = yaml.safe_load(f)
+            width = cfg.get('window_width')
+            height = cfg.get('window_height')
+        except Exception:
+            pass
+        if not width or not height:
+            # Pobierz rozdzielczość głównego ekranu
+            screen = QApplication.primaryScreen()
+            size = screen.size()
+            width = int(size.width() * 0.8)
+            height = int(size.height() * 0.8)
+        self.resize(width, height)
 
     def run_scan(self):
         self.scanner.results.addItem("[DEMO] Wynik skanowania...")

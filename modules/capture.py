@@ -14,7 +14,7 @@ class CaptureModule(ModuleBase):
 		self._start_sniffing()
 
 	def _start_sniffing(self):
-		from scapy.all import sniff
+		from scapy.all import sniff, raw
 		import threading
 		def pkt_callback(pkt):
 			try:
@@ -24,7 +24,8 @@ class CaptureModule(ModuleBase):
 						'src_ip': ip.src,
 						'dst_ip': ip.dst,
 						'protocol': pkt.proto if hasattr(pkt, 'proto') else 'N/A',
-						'payload_size': len(pkt)
+						'payload_size': len(pkt),
+						'raw_bytes': bytes(raw(pkt))
 					}
 					self._last_packet = event
 			except Exception as e:

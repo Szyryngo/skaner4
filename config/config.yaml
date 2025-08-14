@@ -1,5 +1,7 @@
+ai_model_path: data/models/
+filter: ''
 gui: qt
 network_interface: null
-filter: ''
-ai_model_path: data/models/
 ui_port: 5000
+window_height: 800
+window_width: 1280
