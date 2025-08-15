@@ -15,6 +15,7 @@ from qtui.dashboard_layout import DashboardLayout
 from qtui.config_layout import ConfigLayout
 from qtui.devices_layout import DevicesLayout
 from qtui.scanner_layout import ScannerLayout
+from qtui.nn_layout import NNLayout  # Neural Net tab
 from modules.scanner import ScannerModule
 from core.events import Event
 import sqlite3
