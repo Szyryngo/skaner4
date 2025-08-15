@@ -88,6 +88,13 @@ class DashboardTab(QWidget):
         self.start_btn.clicked.connect(self._on_start_sniffing)
         self.pause_btn.clicked.connect(self._on_pause_sniffing)
         self.stop_btn.clicked.connect(self._on_stop_sniffing)
+        # Export buttons
+        self.export_csv_btn = self.findChild(QPushButton, "export_csv_btn")
+        self.export_pcap_btn = self.findChild(QPushButton, "export_pcap_btn")
+        if self.export_csv_btn:
+            self.export_csv_btn.clicked.connect(self._on_export_csv)
+        if self.export_pcap_btn:
+            self.export_pcap_btn.clicked.connect(self._on_export_pcap)
         self.packets.setColumnCount(8)
         self.packets.setHorizontalHeaderLabels([
             "ID", "Czas", "Źródło", "Cel", "Protokół", "Rozmiar (B)", "Waga AI", "Geolokalizacja"
@@ -468,6 +475,42 @@ class DashboardTab(QWidget):
                 if hasattr(self._capture, "paused"):
                     self._capture.paused = False
             self.log_status("Sniffing zatrzymany.")
+        def _on_export_csv(self):
+            """Eksportuje zapisane pakiety do pliku CSV"""
+            from PyQt5.QtWidgets import QFileDialog
+            import csv
+            # wybór pliku
+            path, _ = QFileDialog.getSaveFileName(self, "Zapisz CSV", "packets.csv", "CSV Files (*.csv)")
+            if not path:
+                return
+            try:
+                # Pobierz wszystkie rekordy z bazy
+                c = self._conn.cursor()
+                c.execute("SELECT pkt_id, czas, src, dst, proto, size, ai_weight, geo FROM packets ORDER BY id ASC")
+                rows = c.fetchall()
+                with open(path, 'w', newline='', encoding='utf-8') as f:
+                    writer = csv.writer(f)
+                    writer.writerow(['pkt_id','czas','src','dst','proto','size','ai_weight','geo'])
+                    writer.writerows(rows)
+                self.log_status(f"Wyeksportowano CSV: {path}")
+            except Exception as e:
+                self.log_status(f"Błąd eksportu CSV: {e}")
+
+        def _on_export_pcap(self):
+            """Eksportuje zapisane pakiety do pliku PCAP"""
+            from PyQt5.QtWidgets import QFileDialog
+            try:
+                path, _ = QFileDialog.getSaveFileName(self, "Zapisz PCAP", "packets.pcap", "PCAP Files (*.pcap)")
+                if not path:
+                    return
+                # Zapis surowych bajtów do PCAP
+                from scapy.utils import RawPcapWriter
+                writer = RawPcapWriter(path, linktype=1)
+                for pkt_id, pkt_bytes, meta in self._packet_data:
+                    writer.write(pkt_bytes)
+                self.log_status(f"Wyeksportowano PCAP: {path}")
+            except Exception as e:
+                self.log_status(f"Błąd eksportu PCAP: {e}")
 
 
 class MainWindow(QMainWindow):

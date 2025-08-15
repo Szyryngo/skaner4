@@ -61,13 +61,27 @@
        </property>
       </widget>
      </item>
-     <item>
-      <widget class="QPushButton" name="stop_btn">
-       <property name="text">
-        <string>Stop</string>
-       </property>
-      </widget>
-     </item>
+  <item>
+   <widget class="QPushButton" name="stop_btn">
+    <property name="text">
+     <string>Stop</string>
+    </property>
+   </widget>
+  </item>
+  <item>
+   <widget class="QPushButton" name="export_csv_btn">
+    <property name="text">
+     <string>Eksport CSV</string>
+    </property>
+   </widget>
+  </item>
+  <item>
+   <widget class="QPushButton" name="export_pcap_btn">
+    <property name="text">
+     <string>Eksport PCAP</string>
+    </property>
+   </widget>
+  </item>
     </layout>
    </item>
    <item>
