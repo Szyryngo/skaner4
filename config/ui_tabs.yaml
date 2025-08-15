@@ -11,3 +11,6 @@ tabs:
   - label: "Config"
     module: "qtui.config_layout"
     class: "ConfigLayout"
+  - label: "Neural Net"
+    module: "qtui.nn_layout"
+    class: "NNLayout"
