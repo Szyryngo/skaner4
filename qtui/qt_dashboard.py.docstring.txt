@@ -31,19 +31,9 @@
 - Zakładki do podglądu urządzeń, skanowania sieci i konfiguracji.
 
 ## Ostatnie zmiany
-- Naprawiono wcięcia i powielone konstruktory.
-- Dodano `_set_initial_window_size` do MainWindow.
-- Uzupełniono wyświetlanie HEX/ASCII po kliknięciu pakietu.
-- Usunięto wywołania `_init_db` z MainWindow.
-- Wszystkie zakładki korzystają z layoutów .ui (Qt Designer), logika w Pythonie.
-- Test interfejsów loguje tylko interfejs przechwytujący pakiety do dolnej belki logów.
-- Kod gotowy do dalszego rozwoju i testów.
+ - Dodano przyciski eksportu pakietów (CSV, PCAP) z domyślnymi nazwami plików zawierającymi timestamp (YYYYMMDD_HHMMSS).
 
 ## Użytkowanie
-- Kliknięcie pakietu w tabeli pokazuje szczegóły, HEX i ASCII.
-- Rozmiar okna ustawia się automatycznie.
-- Wszystkie pakiety zapisywane są w bazie SQLite.
-- Uruchom interfejs użytkownika dashboardu.
 - Przejdź do zakładki Dashboard.
 - Użyj pola kombinowanego filtra lub pola wejściowego, aby wybrać/wprowadzić wyrażenie BPF.
 - Kliknij "Ustaw filtr", aby zastosować filtr i zaktualizować przechwytywanie.
