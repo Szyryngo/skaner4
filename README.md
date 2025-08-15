@@ -115,4 +115,8 @@ Program domyślnie uruchamia natywny GUI PyQt5 (main.py → qtui/qt_dashboard.py
 - Szczegółowy opis architektury, API i eventów: **DEVELOPMENT.md**
 - Opis wszystkich modułów i ich przeznaczenia: **MODULES.md**
 - Lista zadań implementacyjnych i testowych: **TODO.md**
+
+## Opcjonalne modele AI
+- IsolationForest (zewnętrzny model w `data/models/isolation_forest.joblib`)
+- Sieć neuronowa (TensorFlow/Keras) – jeśli dodasz `tensorflow` do `requirements.txt`, w `DetectionModule` możesz wczytać `nn_model.h5` i używać predykcji pravdopodobieństwa anomalii.
 ```
