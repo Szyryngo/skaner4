@@ -1,5 +1,10 @@
 # AI Network Packet Analyzer Pro
 
+## 📦 Repozytorium GitHub
+[![Build Status](https://github.com/Szyryngo/skaner4/actions/workflows/python-app.yml/badge.svg)](https://github.com/Szyryngo/skaner4/actions)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+Repozytorium: https://github.com/Szyryngo/skaner4
+
 ## 🆕 Ostatnie zmiany (sierpień 2025)
 - Naprawiono i uproszczono kod dashboardu (qtui/qt_dashboard.py):
 	- Usunięto powielone fragmenty i błędne wcięcia w klasie DashboardTab.

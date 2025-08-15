@@ -34,6 +34,15 @@ class ConfigLayout:
         wh_box.addStretch()
         form.addRow("Wybierz rozmiar:", preset_combo)
         form.addRow("Ręcznie:", wh_box)
+        # Pre-fill manual width/height when preset changes
+        def on_preset(idx):
+            dims = preset_combo.itemData(idx)
+            if isinstance(dims, tuple) and len(dims) == 2:
+                width_input.setText(str(dims[0]))
+                height_input.setText(str(dims[1]))
+        preset_combo.currentIndexChanged.connect(on_preset)
+        # Initialize manual inputs
+        on_preset(preset_combo.currentIndex())
         apply_btn = QPushButton("Zastosuj rozmiar okna")
         form.addRow(apply_btn)
         group.setLayout(form)

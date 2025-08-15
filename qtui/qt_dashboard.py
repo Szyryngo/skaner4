@@ -20,6 +20,13 @@ from modules.scanner import ScannerModule
 from core.events import Event
 import sqlite3
 from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QTextCursor
+# Register QTextCursor metatype for queued signal connections, if available
+try:
+    from PyQt5.QtCore import qRegisterMetaType
+    qRegisterMetaType(QTextCursor, 'QTextCursor')
+except ImportError:
+    pass
 
 print('qt_dashboard.py: przed PacketDetailDialog')
 class PacketDetailDialog(QDialog):
@@ -125,14 +132,16 @@ class DashboardTab(QWidget):
         self._db_path = "packets.db"
         self._init_db()
         self._sniffing = False
+        self._paused = False
         self._orchestrator = None
         self._packet_counter = 0
+
         # Timer for new packet processing
         from PyQt5.QtCore import QTimer
         self._event_timer = QTimer(self)
         self._event_timer.timeout.connect(self._process_new_packets)
         self._event_timer.start(100)
-        # Load settings from config
+        # Load settings from config (UI only, do not start sniffer yet)
         import yaml
         cfg_path = "config/config.yaml"
         try:
@@ -143,45 +152,25 @@ class DashboardTab(QWidget):
         bpf = cfg.get('filter', '')
         if bpf:
             self.filter_combo.lineEdit().setText(bpf)
-        # Apply filter in CaptureModule
-        self._capture.set_filter(bpf)
-        # Select saved interface
+        # Set filter config but do not start sniffing
+        self._capture.config['filter'] = bpf
+        # Select saved interface in UI
         iface = cfg.get('network_interface', None)
         if iface:
             idx = [i for i, (ifn, _) in enumerate(self._iface_map) if ifn == iface]
             if idx:
                 self.interface_combo.setCurrentIndex(idx[0])
-        self._sniffing = False
-        self._orchestrator = None
-        self._packet_counter = 0
 
-    # Timer do cyklicznego pobierania pakietów
-        from PyQt5.QtCore import QTimer
-        self._event_timer = QTimer(self)
-        self._event_timer.timeout.connect(self._process_new_packets)
-        self._event_timer.start(100)
-
-        # Wczytaj filtr z config.yaml jeśli istnieje
-        import yaml
-        cfg_path = "config/config.yaml"
-        try:
-            with open(cfg_path, 'r', encoding='utf-8') as f:
-                cfg = yaml.safe_load(f)
-        except Exception:
-            cfg = {}
-        bpf = cfg.get('filter', '')
-        if bpf:
-            self.filter_combo.lineEdit().setText(bpf)
-        # Wybierz interfejs z config.yaml jeśli istnieje
-        iface = cfg.get('network_interface', None)
-        if iface:
-            idx = [i for i, (ifn, _) in enumerate(self._iface_map) if ifn == iface]
-            if idx:
-                self.interface_combo.setCurrentIndex(idx[0])
+    # Select saved interface in UI already done above
 
         # Load protocol mappings from config
         config_mgr = ConfigManager('config/protocols.yaml')
         self.protocols = config_mgr.load()
+        # Initialize AI modules once for performance
+        self._features_module = FeaturesModule()
+        self._features_module.initialize({})
+        self._detection_module = DetectionModule()
+        self._detection_module.initialize({})
 
     def _on_test_interfaces(self):
         if not hasattr(self, '_capture') or self._capture is None:
@@ -295,17 +284,13 @@ class DashboardTab(QWidget):
             if event and getattr(event, 'type', None) == "NEW_PACKET":
                 pkt_bytes = event.data.get("raw_bytes")
                 meta = dict(event.data)
-                # AI analiza: przepuść przez FeaturesModule i DetectionModule
-                features = FeaturesModule()
-                features.initialize({})
-                features.handle_event(event)
-                features_event = features.generate_event()
+                # AI analiza: reuse initialized modules
+                self._features_module.handle_event(event)
+                features_event = self._features_module.generate_event()
                 ai_weight = ''
                 if features_event:
-                    detection = DetectionModule()
-                    detection.initialize({})
-                    detection.handle_event(features_event)
-                    threat_event = detection.generate_event()
+                    self._detection_module.handle_event(features_event)
+                    threat_event = self._detection_module.generate_event()
                     if threat_event and 'ai_weight' in threat_event.data:
                         ai_weight = threat_event.data['ai_weight']
                 meta['ai_weight'] = ai_weight
@@ -565,12 +550,16 @@ class MainWindow(QMainWindow):
             if TabClass is None:
                 print(f"Brak klasy zakładki: {tab.get('class')}")
                 continue
-            # Jeśli klasa ma metodę build(), użyj jej do utworzenia widgetu i pobierz kontrolki
-            if hasattr(TabClass, 'build'):
-                widget, controls = TabClass().build()
+            # Instantiate and build the tab
+            instance = TabClass()
+            if hasattr(instance, 'build'):
+                widget, controls = instance.build()
             else:
-                widget = TabClass()
+                widget = instance
                 controls = {}
+            # Keep NNLayout instance alive for its own slots
+            if tab.get('class') == 'NNLayout':
+                self._nn_layout = instance
             index = tab_widget.addTab(widget, tab.get('label', tab.get('class')))
             # Konfiguracja funkcjonalności
             if tab.get('class') == 'ConfigLayout' and controls:
@@ -637,7 +626,29 @@ class MainWindow(QMainWindow):
                             cnt_item.setText(str(cnt))
 
                     # Initialize and connect sniffer
-                    self._device_sniffer = DevicesSniffer(iface=None, event_callback=on_device)
+                    # Use selected interface or all if None
+                    iface_sel = self.interface_combo.currentData() if hasattr(self, 'interface_combo') else None
+                    self._device_sniffer = DevicesSniffer(iface=iface_sel, event_callback=on_device)
+
+            # Hook up Neural Net tab buttons
+            elif tab.get('class') == 'NNLayout' and controls:
+                # Connect train and evaluate buttons to NNLayout handlers, ensuring single connection
+                nn_inst = self._nn_layout
+                train_btn = controls.get('train_btn')
+                eval_btn = controls.get('eval_btn')
+                if train_btn:
+                    try:
+                        train_btn.clicked.disconnect()
+                    except TypeError:
+                        pass
+                    train_btn.clicked.connect(nn_inst._on_train)
+                if eval_btn:
+                    try:
+                        eval_btn.clicked.disconnect()
+                    except TypeError:
+                        pass
+                    eval_btn.clicked.connect(nn_inst._on_evaluate)
+
         # Po dodaniu wszystkich zakładek: uruchamiaj sniffing tylko na Devices tab
         try:
             # znajdź indeks zakładki Devices
@@ -658,8 +669,13 @@ class MainWindow(QMainWindow):
     def _apply_window_size(self, width_input, height_input):
         """Zastosuj nowe wymiary okna z zakładki konfiguracji"""
         try:
-            w = int(width_input.text())
-            h = int(height_input.text())
+            w_text = width_input.text().strip()
+            h_text = height_input.text().strip()
+            if not w_text or not h_text:
+                self.log_status("Nie podano wymiarów okna.")
+                return
+            w = int(w_text)
+            h = int(h_text)
             self.resize(w, h)
             # Zapisz do config.yaml
             cfg_path = 'config/config.yaml'

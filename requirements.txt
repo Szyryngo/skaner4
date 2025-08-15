@@ -5,3 +5,15 @@ scikit-learn
 joblib
 numpy
 tensorflow
+
+# Użytkownicy Windows: jeśli instalacja TensorFlow zakończyła się niepowodzeniem z powodu ograniczeń długości ścieżek,
+# możesz włączyć obsługę długich ścieżek w Windows (więcej na https://pip.pypa.io/warnings/enable-long-paths)
+# lub zainstalować wersję CPU-only:
+#   pip install tensorflow-cpu
+# Aby włączyć obsługę długich ścieżek w Windows:
+#  1. Otwórz Edytor rejestru (Win+R, wpisz 'regedit').
+#  2. Przejdź do klucza HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\FileSystem.
+#  3. Utwórz lub ustaw wartość DWORD LongPathsEnabled na 1.
+#  4. Uruchom ponownie komputer.
+# Po włączeniu długich ścieżek ponownie zainstaluj TensorFlow:
+#   pip install tensorflow

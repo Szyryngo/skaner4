@@ -19,7 +19,13 @@
 - [ ] Plugin: integracja z pyshark jako alternatywny backend sniffingu
 - [ ] Plugin: automatyczne powiadomienia (np. email, webhook)
 - [ ] Uprościć konfigurację filtrów BPF (UX)
- 
+- [ ] Dodać testy jednostkowe dla zakładki Neural Net (NNLayout)
+- [x] Uzupełnić dokumentację projektu o instrukcje instalacji TensorFlow i obsługi długich ścieżek na Windows  <!-- zaimplementowano w requirements.txt -->
+- [ ] Rozbudować analyze_nn_model.py o generowanie raportu metryk trenowanego modelu
+- [x] Dodać walidację i obsługę błędów dla przycisków Trenuj/Oceń w NNLayout
+- [ ] Dodać internacjonalizację (i18n) komunikatów w zakładce NNLayout
+- [ ] Uzupełnić dokumentację NNLayout o opis funkcji treningu i oceny sieci
+
 # Filtrowanie pakietów
 - [x] Dodano przycisk `Ustaw filtr` i integrację BPF-filtra z CaptureModule.
 - [x] Filtrowanie BPF działa w locie – restartuje przechwytywanie z nowym filtrem.
