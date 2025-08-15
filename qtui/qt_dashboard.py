@@ -513,10 +513,17 @@ class MainWindow(QMainWindow):
                 if devices_table:
                     self._devices_table = devices_table
                     self._devices_map = {}
+                    # tracking last seen timestamps for inactivity
+                    self._devices_last_seen = {}
+                    self._device_timeout = 300  # seconds until considered inactive
+
+                    # Import sniffer and supporting modules
                     from modules.devices_sniffer import DevicesSniffer
                     from datetime import datetime
                     from PyQt5.QtWidgets import QTableWidgetItem
+                    import time
 
+                    # Callback for detected devices
                     def on_device(event):
                         data = event.data
                         ip = data.get('ip')
@@ -530,6 +537,9 @@ class MainWindow(QMainWindow):
                                 return
                         except Exception:
                             pass
+                        now_ts = time.time()
+                        # update last seen timestamp
+                        self._devices_last_seen[ip] = now_ts
                         if ip not in self._devices_map:
                             row = self._devices_table.rowCount()
                             self._devices_table.insertRow(row)
@@ -538,7 +548,8 @@ class MainWindow(QMainWindow):
                             self._devices_table.setItem(row, 1, QTableWidgetItem(mac))
                             self._devices_table.setItem(row, 2, QTableWidgetItem(ts))
                             self._devices_table.setItem(row, 3, QTableWidgetItem('1'))
-                            self._devices_table.setItem(row, 4, QTableWidgetItem(proto))
+                            # set status to online
+                            self._devices_table.setItem(row, 4, QTableWidgetItem('online'))
                         else:
                             row = self._devices_map[ip]
                             self._devices_table.item(row, 2).setText(ts)
@@ -549,6 +560,7 @@ class MainWindow(QMainWindow):
                                 cnt = 1
                             cnt_item.setText(str(cnt))
 
+                    # Initialize and connect sniffer
                     self._device_sniffer = DevicesSniffer(iface=None, event_callback=on_device)
         # Po dodaniu wszystkich zakładek: uruchamiaj sniffing tylko na Devices tab
         try:
@@ -562,6 +574,11 @@ class MainWindow(QMainWindow):
                 lambda idx: self._device_sniffer.start() if idx == devices_idx else self._device_sniffer.stop()
             )
             self._device_sniffer.start()
+            # timer to clean up inactive devices
+            from PyQt5.QtCore import QTimer
+            self._device_cleanup_timer = QTimer(self)
+            self._device_cleanup_timer.timeout.connect(self._cleanup_devices)
+            self._device_cleanup_timer.start(5000)
     def _apply_window_size(self, width_input, height_input):
         """Zastosuj nowe wymiary okna z zakładki konfiguracji"""
         try:
@@ -596,6 +613,20 @@ class MainWindow(QMainWindow):
                 self.log_status('Brak wyników skanowania.')
         except Exception as e:
             print(f"Błąd podczas skanowania: {e}")
+    def _cleanup_devices(self):
+        """
+        Oznacza hosty przekraczające timeout jako offline w tabeli Devices.
+        """
+        import time
+        from PyQt5.QtWidgets import QTableWidgetItem
+        now_ts = time.time()
+        # Iteruj po kopii, bo modyfikujemy oryginał
+        for ip, last in list(self._devices_last_seen.items()):
+            if now_ts - last > self._device_timeout:
+                row = self._devices_map.get(ip)
+                if row is not None:
+                    # ustaw status na offline
+                    self._devices_table.setItem(row, 4, QTableWidgetItem('offline'))
 
     # Po kliknięciu wiersza w tabeli pokaż szczegóły pakietu
     def _show_packet_details_inline(self, row, col):
