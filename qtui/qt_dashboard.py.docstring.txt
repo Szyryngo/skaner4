@@ -20,7 +20,14 @@
 - `_on_pause_clicked`: wstrzymuje przechwytywanie pakietów (zatrzymuje sniffer).
 - `_on_stop_clicked`: zatrzymuje sniffera i czyści bieżącą sesję.
 
-### DevicesTab, ScannerTab, ConfigTab
+### DevicesTab (Live Devices)
+- Dynamiczne uruchamianie `DevicesSniffer` po wejściu na zakładkę i zatrzymywanie przy opuszczeniu.
+- Tabela `devices`: kolumny IP, MAC, Ostatnio widziany, Pakiety, Status.
+- Callback `on_device(event)`: dodaje nowy wiersz dla nowego IP lub aktualizuje timestamp i licznik pakietów dla istniejącego.
+- Metoda `_cleanup_devices`: cyklicznie co 5 s. oznacza hosty nieaktywne (brak nowych eventów powyżej progu 300 s) jako `offline`.
+3rd-party: wykorzystuje `ipaddress` do filtrowania tylko prywatnych adresów LAN.
+
+### ScannerTab, ConfigTab
 - Zakładki do podglądu urządzeń, skanowania sieci i konfiguracji.
 
 ## Ostatnie zmiany

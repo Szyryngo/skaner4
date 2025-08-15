@@ -35,9 +35,9 @@
 
 ### modules/devices.py
 - [x] Nasłuch pakietów ARP i IP.
-- [ ] Wykrywać nowe urządzenia w sieci i aktualizować listę aktywnych hostów.
-- [ ] Publikować event `DEVICE_DETECTED` dla nowych hostów.
-- [ ] Oznaczać hosty nieaktywne po określonym czasie.
+- [x] Wykrywać nowe urządzenia w sieci i aktualizować listę aktywnych hostów.
+- [x] Publikować event `DEVICE_DETECTED` dla nowych hostów.
+- [x] Oznaczać hosty nieaktywne po określonym czasie.
 
 ---
 
