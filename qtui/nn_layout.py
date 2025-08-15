@@ -1,3 +1,7 @@
+"""Module nn_layout: provides a PyQt5 tab for configuring, training, and evaluating a neural network using TensorFlow or sklearn.
+
+This module implements the NNLayout class which builds UI controls for hyperparameters, handles model training in a background thread,
+and presents evaluation metrics in a formatted HTML table."""
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QSpinBox, QDoubleSpinBox, QPushButton,
     QTextEdit, QHBoxLayout, QGroupBox, QApplication
@@ -17,10 +21,22 @@ except ImportError:
 
 class NNLayout:
     """
-    Zakładka do trenowania i oceny sieci neuronowej.
-    Umożliwia konfigurację hiperparametrów, trenowanie, ocenę i dobór progu.
+    Neural network training and evaluation tab layout.
+
+    Provides UI for setting hyperparameters, training a model in a background thread,
+    and evaluating it on synthetic test data, displaying results in an HTML table.
     """
     def build(self):
+        """
+        Build the UI layout for the neural network tab.
+
+        Returns
+        -------
+        widget : QWidget
+            The container widget holding all controls.
+        controls : dict
+            Dictionary of UI controls keyed by name: 'train_btn', 'eval_btn', 'lr_input', etc.
+        """
         widget = QWidget()
         layout = QVBoxLayout(widget)
         # Initialize model attribute
@@ -88,7 +104,11 @@ class NNLayout:
         return widget, controls
 
     def _on_train(self):
-        """Obsługa treningu sieci w wątku, wyświetlanie postępu."""
+        """
+        Handle training button click: start training in a background thread.
+
+        Reads hyperparameters from inputs, logs start message, and launches `_train_model`.
+        """
         lr = self.lr_input.value()
         epochs = self.epochs_input.value()
         batch = self.batch_input.value()
@@ -97,6 +117,23 @@ class NNLayout:
         threading.Thread(target=self._train_model, args=(lr, epochs, batch), daemon=True).start()
 
     def _train_model(self, lr, epochs, batch):
+        """
+        Train the neural network or sklearn MLPClassifier with given hyperparameters.
+
+        Parameters
+        ----------
+        lr : float
+            Learning rate for optimizer or initial learning rate for MLPClassifier.
+        epochs : int
+            Number of epochs (iterations) for training.
+        batch : int
+            Batch size for model training.
+
+        Notes
+        -----
+        Uses TensorFlow/Keras if available; otherwise falls back to sklearn.neural_network.MLPClassifier.
+        Training progress is appended to `results_view` via Qt signals.
+        """
         # Dynamiczne importy TensorFlow i sklearn
         use_tf = True
         try:
@@ -161,7 +198,12 @@ class NNLayout:
         self.results_view.append(f"Trening zakończony, model zapisany w {model_path}")
 
     def _on_evaluate(self):
-        """Obsługa oceny modelu na zbiorze testowym."""
+        """
+        Handle evaluation button click: evaluate the trained model on synthetic test data.
+
+        Computes accuracy, AUC, confusion matrix, classification report, and a human-readable summary,
+        then displays them in `results_view` as an HTML formatted table.
+        """
         thresh = self.threshold_input.value()
         # Import sklearn metrics
         from sklearn.metrics import accuracy_score, roc_auc_score, classification_report, confusion_matrix
