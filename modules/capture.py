@@ -48,6 +48,12 @@ class CaptureModule(ModuleBase):
 					pass
 			# Build new sniffer
 			def pkt_callback(pkt):
+				# DEBUG: log packet summary and type to verify filtering
+				try:
+					print(f"[CaptureModule][DEBUG] Otrzymałem pakiet: {pkt.summary()}")
+					print(f"[CaptureModule][DEBUG] Typ warstwy głównej: {pkt.__class__.__name__}")
+				except Exception:
+					pass
 				try:
 					if pkt.haslayer('IP'):
 						ip = pkt['IP']
