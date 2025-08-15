@@ -1,5 +1,3 @@
-
-
 - [x] Wszystkie zakładki korzystają z layoutów .ui (Qt Designer), logika w Pythonie
 - [x] Test interfejsów loguje tylko interfejs przechwytujący pakiety do dolnej belki logów
 - [x] Dokumentacja uzupełniona (qt_dashboard.py.docstring.txt)
@@ -20,9 +18,12 @@
 - [ ] Dodać testy jednostkowe dla orchestratora i GUI
 - [ ] Plugin: integracja z pyshark jako alternatywny backend sniffingu
 - [ ] Plugin: automatyczne powiadomienia (np. email, webhook)
-- [ ] Uprościć konfigurację filtrów BPF (lepszy UX)
-- [ ] Dodać tryb dark/light dla GUI
-
+- [ ] Uprościć konfigurację filtrów BPF (UX)
+ 
+# Filtrowanie pakietów
+- [x] Dodano przycisk `Ustaw filtr` i integrację BPF-filtra z CaptureModule.
+- [x] Filtrowanie BPF działa w locie – restartuje przechwytywanie z nowym filtrem.
+         
 ## Pomysły na przyszłość
 - [ ] Wizualizacja ruchu sieciowego (wykresy, heatmapy)
 - [ ] Integracja z SIEM/SOC
@@ -78,4 +79,3 @@
 ### tests/
 - [ ] Testy jednostkowe każdego modułu (mock eventów).
 - [ ] Test integracyjny: capture → features → detection → threat → ui.
-```

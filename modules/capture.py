@@ -1,6 +1,7 @@
-
 from core.interfaces import ModuleBase
 from core.events import Event
+
+from scapy.all import AsyncSniffer, raw, sniff
 
 class CaptureModule(ModuleBase):
 	def test_all_interfaces(self):
@@ -30,42 +31,60 @@ class CaptureModule(ModuleBase):
 		"""Ustawia interfejs i restartuje sniffing."""
 		self.config['network_interface'] = iface
 		self._start_sniffing()
-	"""
-	Moduł przechwytujący pakiety w trybie promiscuous.
-	Publikuje event NEW_PACKET.
-	"""
+
 	def initialize(self, config):
 		"""Inicjalizuje moduł z konfiguracją (np. interfejs sieciowy, filtr)."""
 		self.config = config
 		self._last_packet = None
-		self._start_sniffing()
+		self._sniffer = None
 
 	def _start_sniffing(self):
-		from scapy.all import sniff, raw
-		import threading
-		def pkt_callback(pkt):
-			try:
-				if pkt.haslayer('IP'):
-					ip = pkt['IP']
-					event = {
-						'src_ip': ip.src,
-						'dst_ip': ip.dst,
-						'protocol': pkt.proto if hasattr(pkt, 'proto') else 'N/A',
-						'payload_size': len(pkt),
-						'raw_bytes': bytes(raw(pkt))
-					}
-					self._last_packet = event
-			except Exception as e:
-				print(f"[CaptureModule] Błąd przy analizie pakietu: {e}")
-		iface = self.config.get('network_interface', None)
-		flt = self.config.get('filter', '')
-		def sniff_thread():
+			"""Startuje lub restartuje Sniffer z aktualnym filtrem i interfejsem"""
+			# Stop existing sniffer
+			if hasattr(self, '_sniffer') and self._sniffer:
+				try:
+					self._sniffer.stop()
+				except Exception:
+					pass
+			# Build new sniffer
+			def pkt_callback(pkt):
+				try:
+					if pkt.haslayer('IP'):
+						ip = pkt['IP']
+						event = {
+							'src_ip': ip.src,
+							'dst_ip': ip.dst,
+							'protocol': pkt.proto if hasattr(pkt, 'proto') else 'N/A',
+							'payload_size': len(pkt),
+							'raw_bytes': bytes(raw(pkt))
+						}
+						self._last_packet = event
+				except Exception as e:
+					print(f"[CaptureModule] Błąd przy analizie pakietu: {e}")
+
+			iface = self.config.get('network_interface', None)
+			flt = self.config.get('filter', '')
+			print(f"[CaptureModule] Starting AsyncSniffer on iface={iface}, filter='{flt}'")
+			# Prepare AsyncSniffer args
+			kwargs = {'prn': pkt_callback, 'iface': iface, 'store': False}
 			if flt and flt.strip().lower() not in ('', 'nie filtruj', 'none'):
-				sniff(prn=pkt_callback, filter=flt, iface=iface, store=0)
-			else:
-				sniff(prn=pkt_callback, iface=iface, store=0)
-		t = threading.Thread(target=sniff_thread, daemon=True)
-		t.start()
+				kwargs['filter'] = flt
+			# Create and start sniffer
+			self._sniffer = AsyncSniffer(**kwargs)
+			self._sniffer.daemon = True
+			self._sniffer.start()
+
+	def stop_sniffing(self):
+			"""Zatrzymuje aktywny sniffer"""
+			if hasattr(self, '_sniffer') and self._sniffer:
+				try:
+					self._sniffer.stop()
+				except Exception:
+					pass
+	def set_filter(self, bpf):
+			"""Ustawia nowy BPF-filter i resetuje sniffer"""
+			self.config['filter'] = bpf
+			self._start_sniffing()
 
 	def handle_event(self, event):
 		"""Nie obsługuje eventów (sniffing jest pasywny)."""

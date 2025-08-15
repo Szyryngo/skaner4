@@ -8,10 +8,17 @@
 
 ### DashboardTab(QWidget)
 - Panel główny do podglądu przechwyconych pakietów, szczegółów, HEX/ASCII, filtrów i sterowania sniffingiem.
+- Dodano przycisk **Ustaw filtr**, który aktualizuje BPF-filter i restartuje przechwytywanie.
+### Metody odpowiedzialne za filtrowanie:
 - `add_packet(pkt_id, pkt_bytes, meta)`: dodaje pakiet do tabeli i bazy.
+- `_on_set_filter()`: handler przycisku `Ustaw filtr` – czyści widok, zapisuje i stosuje nowy BPF-filter.
+- `_set_bpf_filter(bpf)`: zapisuje filter do `config/config.yaml`, aktualizuje CaptureModule i restartuje sniffing.
 - `_show_packet_details_inline(row, col)`: po kliknięciu pakietu wyświetla szczegóły, HEX i ASCII.
 - `_format_hex(pkt_bytes)`, `_format_ascii(pkt_bytes)`: konwersja bajtów na widok HEX/ASCII.
 - Obsługa infinite scroll, filtrów BPF, logowania statusu.
+- `_on_start_clicked`: uruchamia lub wznawia przechwytywanie pakietów.
+- `_on_pause_clicked`: wstrzymuje przechwytywanie pakietów (zatrzymuje sniffer).
+- `_on_stop_clicked`: zatrzymuje sniffera i czyści bieżącą sesję.
 
 ### DevicesTab, ScannerTab, ConfigTab
 - Zakładki do podglądu urządzeń, skanowania sieci i konfiguracji.
@@ -29,3 +36,10 @@
 - Kliknięcie pakietu w tabeli pokazuje szczegóły, HEX i ASCII.
 - Rozmiar okna ustawia się automatycznie.
 - Wszystkie pakiety zapisywane są w bazie SQLite.
+- Uruchom interfejs użytkownika dashboardu.
+- Przejdź do zakładki Dashboard.
+- Użyj pola kombinowanego filtra lub pola wejściowego, aby wybrać/wprowadzić wyrażenie BPF.
+- Kliknij "Ustaw filtr", aby zastosować filtr i zaktualizować przechwytywanie.
+
+## Dodatkowe informacje
+- Filtr BPF jest teraz stosowany w czasie rzeczywistym, ponownie uruchamiając AsyncSniffer z określonym filtrem.

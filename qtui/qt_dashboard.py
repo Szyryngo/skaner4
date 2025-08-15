@@ -8,6 +8,13 @@ from PyQt5.QtWidgets import (
 )
 import threading
 import yaml
+# Import layout classes for dynamic tabs
+from qtui.dashboard_layout import DashboardLayout
+from qtui.config_layout import ConfigLayout
+from qtui.devices_layout import DevicesLayout
+from qtui.scanner_layout import ScannerLayout
+from modules.scanner import ScannerModule
+from core.events import Event
 import sqlite3
 from PyQt5.QtCore import Qt
 
@@ -70,6 +77,13 @@ class DashboardTab(QWidget):
         ])
         self.filter_combo.currentIndexChanged.connect(self._on_filter_combo_changed)
         self.filter_combo.lineEdit().editingFinished.connect(self._on_filter_edit_changed)
+        # Add 'Ustaw filtr' button
+        try:
+            self.set_filter_btn = self.findChild(QPushButton, "set_filter_btn")
+            if self.set_filter_btn:
+                self.set_filter_btn.clicked.connect(self._on_set_filter)
+        except Exception:
+            pass
         self.test_btn.clicked.connect(self._on_test_interfaces)
         self.start_btn.clicked.connect(self._on_start_sniffing)
         self.pause_btn.clicked.connect(self._on_pause_sniffing)
@@ -88,28 +102,37 @@ class DashboardTab(QWidget):
         self.detail_info.setPlaceholderText("Wybierz pakiet, aby zobaczyć szczegóły...")
         self.status_log.setStyleSheet("background: #222; color: #fff; font-family: Consolas, monospace; font-size: 12px; border-radius: 6px; padding: 4px;")
 
-        self._capture = None
+        # Inicjalizacja CaptureModule
+        from modules.capture import CaptureModule
+        self._capture = CaptureModule()
+        self._capture.initialize({})
+
+        # Initialize local storage and DB
         self._packet_data = []
         self._db_path = "packets.db"
         self._init_db()
         self._sniffing = False
         self._orchestrator = None
         self._packet_counter = 0
+        # Timer for new packet processing
         from PyQt5.QtCore import QTimer
         self._event_timer = QTimer(self)
         self._event_timer.timeout.connect(self._process_new_packets)
         self._event_timer.start(100)
+        # Load settings from config
         import yaml
         cfg_path = "config/config.yaml"
         try:
             with open(cfg_path, 'r', encoding='utf-8') as f:
-                cfg = yaml.safe_load(f)
+                cfg = yaml.safe_load(f) or {}
         except Exception:
             cfg = {}
         bpf = cfg.get('filter', '')
         if bpf:
             self.filter_combo.lineEdit().setText(bpf)
-        # Wybierz interfejs z config.yaml jeśli istnieje
+        # Apply filter in CaptureModule
+        self._capture.set_filter(bpf)
+        # Select saved interface
         iface = cfg.get('network_interface', None)
         if iface:
             idx = [i for i, (ifn, _) in enumerate(self._iface_map) if ifn == iface]
@@ -119,7 +142,7 @@ class DashboardTab(QWidget):
         self._orchestrator = None
         self._packet_counter = 0
 
-        # Timer do cyklicznego pobierania pakietów
+    # Timer do cyklicznego pobierania pakietów
         from PyQt5.QtCore import QTimer
         self._event_timer = QTimer(self)
         self._event_timer.timeout.connect(self._process_new_packets)
@@ -247,7 +270,8 @@ class DashboardTab(QWidget):
 
     def _process_new_packets(self):
         # Pobiera nowe pakiety z CaptureModule, analizuje AI i wyświetla w tabeli.
-        if not self._sniffing:
+        # DODATKOWA BLOKADA: nie przetwarzaj jeśli _sniffing==False
+        if not self._sniffing or self._paused:
             return
         if self._capture and hasattr(self._capture, 'generate_event'):
             event = self._capture.generate_event()
@@ -331,6 +355,18 @@ class DashboardTab(QWidget):
     def _on_filter_edit_changed(self):
         bpf = self.filter_combo.lineEdit().text().strip()
         self._set_bpf_filter(bpf)
+    
+    def _on_set_filter(self):
+        # Ensure sniffing is active before applying filter
+        if not self._sniffing:
+            self._on_start_sniffing()
+        # Apply new filter
+        bpf = self.filter_combo.currentText().strip() or self.filter_combo.lineEdit().text().strip()
+        self._set_bpf_filter(bpf)
+        # Clear table so only new packets matching filter appear
+        self.packets.setRowCount(0)
+        # Log status
+        self.log_status(f"Ustawiono filtr: {bpf}")
 
     def _set_bpf_filter(self, bpf):
         # Jeśli pole jest puste lub "Nie filtruj", przekazuj pusty filtr
@@ -341,7 +377,7 @@ class DashboardTab(QWidget):
         cfg_path = "config/config.yaml"
         try:
             with open(cfg_path, 'r', encoding='utf-8') as f:
-                cfg = yaml.safe_load(f)
+                cfg = yaml.safe_load(f) or {}
         except Exception:
             cfg = {}
         cfg['filter'] = bpf
@@ -386,307 +422,258 @@ class DashboardTab(QWidget):
 
     def _on_start_sniffing(self):
         self._sniffing = True
+        self._paused = False
+        # Przekaż do CaptureModule
+        if self._capture:
+            # Preferowane: jawne metody start/stop/pause
+            if hasattr(self._capture, "start_sniffing"):
+                self._capture.start_sniffing()
+            elif hasattr(self._capture, "_start_sniffing"):
+                self._capture._start_sniffing()
+            # Jeśli CaptureModule ma własny wątek, ustaw flagę/wznów
+            if hasattr(self._capture, "paused"):
+                self._capture.paused = False
+            if hasattr(self._capture, "stopped"):
+                self._capture.stopped = False
         self.log_status("Sniffing uruchomiony.")
 
     def _on_pause_sniffing(self):
         if self._sniffing:
             self._sniffing = False
+            self._paused = True
+            if self._capture:
+                if hasattr(self._capture, "pause_sniffing"):
+                    self._capture.pause_sniffing()
+                elif hasattr(self._capture, "_pause_sniffing"):
+                    self._capture._pause_sniffing()
+                elif hasattr(self._capture, "stop_sniffing"):
+                    self._capture.stop_sniffing()
+                elif hasattr(self._capture, "_stop_sniffing"):
+                    self._capture._stop_sniffing()
+                if hasattr(self._capture, "paused"):
+                    self._capture.paused = True
             self.log_status("Sniffing wstrzymany.")
 
     def _on_stop_sniffing(self):
-        if self._sniffing:
+        if self._sniffing or self._paused:
             self._sniffing = False
+            self._paused = False
+            if self._capture:
+                if hasattr(self._capture, "stop_sniffing"):
+                    self._capture.stop_sniffing()
+                elif hasattr(self._capture, "_stop_sniffing"):
+                    self._capture._stop_sniffing()
+                if hasattr(self._capture, "stopped"):
+                    self._capture.stopped = True
+                if hasattr(self._capture, "paused"):
+                    self._capture.paused = False
             self.log_status("Sniffing zatrzymany.")
 
-    # ...existing code...
 
-    # _packet_desc niepotrzebny
-
-    # _short_packet niepotrzebny
-
-
-    # ...existing code...
-
-    # ...existing code...
-
-print('qt_dashboard.py: przed DevicesTab')
-class DevicesTab(QWidget):
-    def __init__(self):
-        super().__init__()
-        from PyQt5 import uic
-        from PyQt5.QtWidgets import QTableWidget
-        uic.loadUi("qtui/devices.ui", self)
-        self.devices = self.findChild(QTableWidget, "devices")
-        self._device_data = []
-
-    def update_device(self, device_info):
-        # device_info: dict z polami ip, mac, last_seen, packets, status
-        # Szukaj po IP, aktualizuj lub dodaj na początek
-        ip = device_info.get('ip', '-')
-        idx = next((i for i, d in enumerate(self._device_data) if d.get('ip') == ip), None)
-        if idx is not None:
-            self._device_data.pop(idx)
-            self.devices.removeRow(idx)
-        self._device_data.insert(0, device_info)
-        self.devices.insertRow(0)
-        row = [
-            device_info.get('ip', '-'),
-            device_info.get('mac', '-'),
-            device_info.get('last_seen', '-'),
-            str(device_info.get('packets', '-')),
-            device_info.get('status', '-')
-        ]
-        for col, val in enumerate(row):
-            item = QTableWidgetItem(val)
-            self.devices.setItem(0, col, item)
-        # Kolorowanie statusu
-        color = None
-        status = device_info.get('status', 'online')
-        if status == 'threat':
-            color = '#FFCDD2'
-        elif status == 'suspicious':
-            color = '#FFF9C4'
-        elif status == 'online':
-            color = '#C8E6C9'
-        if color:
-            for col in range(self.devices.columnCount()):
-                self.devices.item(0, col).setBackgroundColor(color)
-        # Ogranicz do 500 urządzeń
-        if self.devices.rowCount() > 500:
-            self.devices.removeRow(self.devices.rowCount()-1)
-            self._device_data = self._device_data[:500]
-
-print('qt_dashboard.py: przed ScannerTab')
-class ScannerTab(QWidget):
-    def __init__(self):
-        super().__init__()
-        from PyQt5 import uic
-        from PyQt5.QtWidgets import QPushButton, QListWidget
-        uic.loadUi("qtui/scanner.ui", self)
-        self.scan_btn = self.findChild(QPushButton, "scan_btn")
-        self.results = self.findChild(QListWidget, "results")
-
-
-from PyQt5.QtWidgets import QHBoxLayout, QLineEdit, QMessageBox, QComboBox, QFormLayout
-
-
-print('qt_dashboard.py: przed ConfigTab')
-class ConfigTab(QWidget):
-    def __init__(self, main_window=None):
-        super().__init__()
-        from PyQt5 import uic
-        from PyQt5.QtWidgets import QComboBox, QLineEdit, QPushButton
-        uic.loadUi("qtui/config.ui", self)
-        self.main_window = main_window
-        self.preset_combo = self.findChild(QComboBox, "preset_combo")
-        self.width_input = self.findChild(QLineEdit, "width_input")
-        self.height_input = self.findChild(QLineEdit, "height_input")
-        self.apply_btn = self.findChild(QPushButton, "apply_btn")
-        self._load_window_size()
-        self.apply_btn.clicked.connect(self._apply_window_size)
-        self.preset_combo.currentIndexChanged.connect(self._preset_selected)
-
-    def _preset_selected(self, idx):
-        w, h = self.preset_combo.currentData()
-        self.width_input.setText(str(w))
-        self.height_input.setText(str(h))
-
-    def _load_window_size(self):
-        try:
-            with open('config/config.yaml', 'r', encoding='utf-8') as f:
-                cfg = yaml.safe_load(f)
-            width = cfg.get('window_width', '')
-            height = cfg.get('window_height', '')
-            self.width_input.setText(str(width))
-            self.height_input.setText(str(height))
-        except Exception:
-            self.width_input.setText('')
-            self.height_input.setText('')
-
-    def _apply_window_size(self):
-        try:
-            width = int(self.width_input.text())
-            height = int(self.height_input.text())
-            if width < 400 or height < 300:
-                raise ValueError("Minimalny rozmiar to 400x300")
-            with open('config/config.yaml', 'r', encoding='utf-8') as f:
-                cfg = yaml.safe_load(f)
-            cfg['window_width'] = width
-            cfg['window_height'] = height
-            with open('config/config.yaml', 'w', encoding='utf-8') as f:
-                yaml.safe_dump(cfg, f, allow_unicode=True)
-            if self.main_window:
-                self.main_window.resize(width, height)
-            QMessageBox.information(self, "Sukces", f"Nowy rozmiar okna: {width}x{height}")
-        except Exception as e:
-            QMessageBox.warning(self, "Błąd", f"Nieprawidłowe dane: {e}")
-
-
-
-import threading
-import queue
-from PyQt5.QtCore import Qt, QTimer
-from PyQt5.QtGui import QScreen
-
-
-
-print('qt_dashboard.py: przed MainWindow')
 class MainWindow(QMainWindow):
-    def _set_initial_window_size(self):
-        # Ustaw rozmiar okna na podstawie config.yaml lub domyślnie na 1200x800
-        import os
-        import yaml
-        cfg_path = os.path.join("config", "config.yaml")
-        width, height = 1200, 800
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Network Dashboard")
+
+        tab_widget = QTabWidget(self)
+        self.setCentralWidget(tab_widget)
+
+        # Dynamiczne ładowanie zakładek z config/ui_tabs.yaml
         try:
-            with open(cfg_path, 'r', encoding='utf-8') as f:
-                cfg = yaml.safe_load(f)
-            w = cfg.get('window_width')
-            h = cfg.get('window_height')
-            if isinstance(w, int) and isinstance(h, int):
-                width, height = w, h
+            with open('config/ui_tabs.yaml', 'r', encoding='utf-8') as f:
+                tabs_cfg = yaml.safe_load(f).get('tabs', [])
         except Exception:
-            pass
-        self.resize(width, height)
-    def __init__(self):
-        super().__init__()
-        self.setWindowTitle("AI Network Packet Analyzer Pro")
-        self.tabs = QTabWidget()
-        from core.orchestrator import Orchestrator
-        orchestrator = Orchestrator()
-        orchestrator.initialize()
-        capture = None
-        for m in orchestrator.modules:
-            if m.__class__.__name__ == "CaptureModule":
-                capture = m
-                break
-        self.dashboard = DashboardTab()
-        self.dashboard._capture = capture
-        self.devices = DevicesTab()
-        self.scanner = ScannerTab()
-        self.config = ConfigTab(main_window=self)
-        self.tabs.addTab(self.dashboard, "Dashboard")
-        self.tabs.addTab(self.devices, "Live Devices")
-        self.tabs.addTab(self.scanner, "Network Scanner")
-        self.tabs.addTab(self.config, "Configuration")
-        self.setCentralWidget(self.tabs)
-
-        # Skalowanie okna do rozdzielczości ekranu lub config.yaml
-        self._set_initial_window_size()
-        self.setMinimumSize(800, 600)  # Minimalny rozmiar
-        self.setWindowFlag(Qt.Window)
-        self.setWindowState(Qt.WindowActive)
-
-
-    def initialize_orchestrator(self):
-        self._selected_iface = self.dashboard.interface_combo.currentText()
-        from core.orchestrator import Orchestrator
-        self._orchestrator = Orchestrator()
-        self._orchestrator.initialize()
-        # Ustaw interfejs na start
-        for m in self._orchestrator.modules:
-            if hasattr(m, 'set_interface'):
-                m.set_interface(self._selected_iface)
-        self._sniffing = True
-        self._paused = False
-        self._packet_counter = 0
-        self._ai_weights = {}
-        self._event_timer = QTimer()
-        self._event_timer.timeout.connect(self._process_all_events)
-        self._event_timer.start(200)
-
-    def _process_all_events(self):
-        # Pobierz eventy z generate_event() wszystkich modułów orchestratora
-        for m in self._orchestrator.modules:
-            event = m.generate_event() if hasattr(m, 'generate_event') else None
-            if not event:
+            tabs_cfg = []
+        for tab in tabs_cfg:
+            TabClass = globals().get(tab.get('class'))
+            if TabClass is None:
+                print(f"Brak klasy zakładki: {tab.get('class')}")
                 continue
-            if event.type == "NEW_PACKET":
-                pkt_bytes = event.data.get("raw_bytes")
-                if pkt_bytes:
-                    src_ip = event.data.get('src_ip', '-')
-                    ai_weight = self._ai_weights.get(src_ip, '-')
-                    meta = dict(event.data)
-                    meta['ai_weight'] = ai_weight
-                    self._packet_counter += 1
-                    self.dashboard._add_packet(self._packet_counter, pkt_bytes, meta)
-            elif event.type == "NEW_THREAT":
-                src_ip = event.data.get('ip', '-')
-                ai_weight = event.data.get('ai_weight', '-')
-                self._ai_weights[src_ip] = ai_weight
-            elif event.type == "DEVICE_DETECTED":
-                ip = event.data.get('ip', '-')
-                device_info = {
-                    'ip': ip,
-                    'mac': event.data.get('mac', '-') if 'mac' in event.data else '-',
-                    'last_seen': event.data.get('last_seen', '-') if 'last_seen' in event.data else '-',
-                    'packets': event.data.get('packets', 1),
-                    'status': event.data.get('status', 'online'),
-                }
-                self.devices.update_device(device_info)
+            # Jeśli klasa ma metodę build(), użyj jej do utworzenia widgetu i pobierz kontrolki
+            if hasattr(TabClass, 'build'):
+                widget, controls = TabClass().build()
+            else:
+                widget = TabClass()
+                controls = {}
+            index = tab_widget.addTab(widget, tab.get('label', tab.get('class')))
+            # Konfiguracja funkcjonalności
+            if tab.get('class') == 'ConfigLayout' and controls:
+                apply_btn = controls.get('apply_btn')
+                wi = controls.get('width_input')
+                hi = controls.get('height_input')
+                if apply_btn and wi and hi:
+                    apply_btn.clicked.connect(lambda _, wi=wi, hi=hi: self._apply_window_size(wi, hi))
+            elif tab.get('class') == 'ScannerLayout' and controls:
+                scan_btn = controls.get('scan_btn')
+                results = controls.get('results')
+                if scan_btn and results:
+                    scan_btn.clicked.connect(lambda _, r=results: self._run_scan(r))
+            elif tab.get('class') == 'DevicesLayout' and controls:
+                devices_table = controls.get('devices')
+                if devices_table:
+                    self._devices_table = devices_table
+                    self._devices_map = {}
+                    from modules.devices_sniffer import DevicesSniffer
+                    from datetime import datetime
+                    from PyQt5.QtWidgets import QTableWidgetItem
 
-    def _run_orchestrator(self):
-        # Import lokalny, by nie blokować GUI
-        from core.orchestrator import Orchestrator
-        orchestrator = Orchestrator()
-        orchestrator.initialize()
-        # Znajdź CaptureModule
-        self._capture = None
-        for m in orchestrator.modules:
-            if m.__class__.__name__ == "CaptureModule":
-                self._capture = m
-                break
-        # Ustaw interfejs na start
-        if self._capture:
-            self._capture.set_interface(self._selected_iface)
-        # Przechwytuj pakiety tylko gdy _sniffing==True
-        while True:
-            if self._sniffing and not self._paused and self._capture:
-                event = self._capture.generate_event()
-                if event and event.type == "NEW_PACKET":
-                    self._event_queue.put(event)
-            import time
-        self.initialize_orchestrator()
-        self._ai_weights = getattr(self, '_ai_weights', {})
-        while not self._event_queue.empty():
-            event = self._event_queue.get()
-            if event.type == "NEW_PACKET":
-                pkt_bytes = event.data.get("raw_bytes")
-                if pkt_bytes:
-                    src_ip = event.data.get('src_ip', '-')
-                    # Zawsze wyświetl ostatnią znaną wagę AI dla src_ip (nie usuwaj z dict)
-                    ai_weight = self._ai_weights.get(src_ip, '-')
-                    meta = dict(event.data)
-                    meta['ai_weight'] = ai_weight
-                    self._packet_counter += 1
-                    self.dashboard.add_packet(self._packet_counter, pkt_bytes, meta)
-            elif event.type == "NEW_THREAT":
-                # Zapisz wagę AI dla danego src_ip
-                src_ip = event.data.get('ip', '-')
-                ai_weight = event.data.get('ai_weight', '-')
-                self._ai_weights[src_ip] = ai_weight
-            elif event.type == "DEVICE_DETECTED":
-                # Przekaż dane do DevicesTab
-                ip = event.data.get('ip', '-')
-                # Uzupełnij o inne dane jeśli są dostępne
-                device_info = {
-                    'ip': ip,
-                    'mac': event.data.get('mac', '-'),
-                    'last_seen': event.data.get('last_seen', '-'),
-                    'packets': event.data.get('packets', 1),
-                    'status': event.data.get('status', 'online'),
-                }
-                self.devices.update_device(device_info)
+                    def on_device(event):
+                        data = event.data
+                        ip = data.get('ip')
+                        mac = data.get('mac', '')
+                        proto = data.get('proto', '')
+                        ts = datetime.now().strftime('%H:%M:%S')
+                        # Filter private LAN IPs only
+                        try:
+                            import ipaddress
+                            if not ipaddress.ip_address(ip).is_private:
+                                return
+                        except Exception:
+                            pass
+                        if ip not in self._devices_map:
+                            row = self._devices_table.rowCount()
+                            self._devices_table.insertRow(row)
+                            self._devices_map[ip] = row
+                            self._devices_table.setItem(row, 0, QTableWidgetItem(ip))
+                            self._devices_table.setItem(row, 1, QTableWidgetItem(mac))
+                            self._devices_table.setItem(row, 2, QTableWidgetItem(ts))
+                            self._devices_table.setItem(row, 3, QTableWidgetItem('1'))
+                            self._devices_table.setItem(row, 4, QTableWidgetItem(proto))
+                        else:
+                            row = self._devices_map[ip]
+                            self._devices_table.item(row, 2).setText(ts)
+                            cnt_item = self._devices_table.item(row, 3)
+                            try:
+                                cnt = int(cnt_item.text()) + 1
+                            except:
+                                cnt = 1
+                            cnt_item.setText(str(cnt))
 
-    def _start_sniffing(self):
+                    self._device_sniffer = DevicesSniffer(iface=None, event_callback=on_device)
+        # Po dodaniu wszystkich zakładek: uruchamiaj sniffing tylko na Devices tab
+        try:
+            # znajdź indeks zakładki Devices
+            devices_idx = next(i for i in range(tab_widget.count()) if tab_widget.tabText(i) == 'Devices')
+        except StopIteration:
+            devices_idx = None
+        if devices_idx is not None and hasattr(self, '_device_sniffer'):
+            # po zmianie zakładki start/stop sniffer
+            tab_widget.currentChanged.connect(
+                lambda idx: self._device_sniffer.start() if idx == devices_idx else self._device_sniffer.stop()
+            )
+            self._device_sniffer.start()
+    def _apply_window_size(self, width_input, height_input):
+        """Zastosuj nowe wymiary okna z zakładki konfiguracji"""
+        try:
+            w = int(width_input.text())
+            h = int(height_input.text())
+            self.resize(w, h)
+            # Zapisz do config.yaml
+            cfg_path = 'config/config.yaml'
+            with open(cfg_path, 'r', encoding='utf-8') as f:
+                cfg = yaml.safe_load(f) or {}
+            cfg['window_width'] = w
+            cfg['window_height'] = h
+            with open(cfg_path, 'w', encoding='utf-8') as f:
+                yaml.safe_dump(cfg, f, allow_unicode=True)
+            self.log_status(f"Zmieniono rozmiar okna na {w}x{h}")
+        except Exception as e:
+            print(f"Błąd przy zmianie rozmiaru okna: {e}")
+    def _run_scan(self, results_widget):
+        """Uruchom skanowanie sieci i wyświetl wyniki"""
+        try:
+            module = ScannerModule()
+            module.initialize({})
+            module.handle_event(Event('SCAN_REQUEST', {}))
+            ev = module.generate_event()
+            if ev and hasattr(ev, 'data'):
+                found = ev.data.get('result', [])
+                results_widget.clear()
+                for item in found if isinstance(found, list) else []:
+                    results_widget.addItem(str(item))
+                self.log_status('Skanowanie ukończone.')
+            else:
+                self.log_status('Brak wyników skanowania.')
+        except Exception as e:
+            print(f"Błąd podczas skanowania: {e}")
+
+    # Po kliknięciu wiersza w tabeli pokaż szczegóły pakietu
+    def _show_packet_details_inline(self, row, col):
+        idx = row
+        if 0 <= idx < len(self._packet_data):
+            pkt_id, pkt_bytes, meta = self._packet_data[idx]
+            # Szczegóły tekstowe
+            details = []
+            for k, v in meta.items():
+                details.append(f"{k}: {v}")
+            self.detail_info.setText("\n".join(details))
+            # HEX i ASCII
+            self.hex_view.setText(self._format_hex(pkt_bytes))
+            self.ascii_view.setText(self._format_ascii(pkt_bytes))
+
+    def _format_hex(self, pkt_bytes):
+        # HEX dump (16 bajtów na linię)
+        lines = []
+        for i in range(0, len(pkt_bytes), 16):
+            chunk = pkt_bytes[i:i+16]
+            hexstr = ' '.join(f"{b:02X}" for b in chunk)
+            lines.append(hexstr)
+        return '\n'.join(lines)
+
+    def _format_ascii(self, pkt_bytes):
+        # ASCII dump (nieczytelne znaki jako .)
+        lines = []
+        for i in range(0, len(pkt_bytes), 16):
+            chunk = pkt_bytes[i:i+16]
+            asciistr = ''.join(chr(b) if 32 <= b < 127 else '.' for b in chunk)
+            lines.append(asciistr)
+        return '\n'.join(lines)
+
+    def _on_start_sniffing(self):
         self._sniffing = True
         self._paused = False
-        # Ustaw interfejs na aktualnie wybrany
-        if hasattr(self, '_capture') and self._capture:
-            self._capture.set_interface(self._selected_iface)
+        # Przekaż do CaptureModule
+        if self._capture:
+            # Preferowane: jawne metody start/stop/pause
+            if hasattr(self._capture, "start_sniffing"):
+                self._capture.start_sniffing()
+            elif hasattr(self._capture, "_start_sniffing"):
+                self._capture._start_sniffing()
+            # Jeśli CaptureModule ma własny wątek, ustaw flagę/wznów
+            if hasattr(self._capture, "paused"):
+                self._capture.paused = False
+            if hasattr(self._capture, "stopped"):
+                self._capture.stopped = False
+        self.log_status("Sniffing uruchomiony.")
 
-    def _pause_sniffing(self):
+    def _on_pause_sniffing(self):
         if self._sniffing:
-            self._paused = not self._paused
+            self._sniffing = False
+            self._paused = True
+            if self._capture:
+                if hasattr(self._capture, "pause_sniffing"):
+                    self._capture.pause_sniffing()
+                elif hasattr(self._capture, "_pause_sniffing"):
+                    self._capture._pause_sniffing()
+                elif hasattr(self._capture, "stop_sniffing"):
+                    self._capture.stop_sniffing()
+                elif hasattr(self._capture, "_stop_sniffing"):
+                    self._capture._stop_sniffing()
+                if hasattr(self._capture, "paused"):
+                    self._capture.paused = True
+            self.log_status("Sniffing wstrzymany.")
 
-
+    def _on_stop_sniffing(self):
+        if self._sniffing or self._paused:
+            self._sniffing = False
+            self._paused = False
+            if self._capture:
+                if hasattr(self._capture, "stop_sniffing"):
+                    self._capture.stop_sniffing()
+                elif hasattr(self._capture, "_stop_sniffing"):
+                    self._capture._stop_sniffing()
+                if hasattr(self._capture, "stopped"):
+                    self._capture.stopped = True
+                if hasattr(self._capture, "paused"):
+                    self._capture.paused = False
+            self.log_status("Sniffing zatrzymany.")

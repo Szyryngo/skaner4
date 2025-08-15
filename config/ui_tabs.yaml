@@ -1,0 +1,13 @@
+tabs:
+  - label: "Dashboard"
+    module: "qtui.qt_dashboard"
+    class: "DashboardTab"
+  - label: "Devices"
+    module: "qtui.devices_layout"
+    class: "DevicesLayout"
+  - label: "Scanner"
+    module: "qtui.scanner_layout"
+    class: "ScannerLayout"
+  - label: "Config"
+    module: "qtui.config_layout"
+    class: "ConfigLayout"

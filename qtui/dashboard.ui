@@ -39,7 +39,14 @@
      </item>
      <item>
       <widget class="QComboBox" name="filter_combo"/>
-     </item>
+    </item>
+    <item>
+     <widget class="QPushButton" name="set_filter_btn">
+      <property name="text">
+       <string>Ustaw filtr</string>
+      </property>
+     </widget>
+    </item>
      <item>
       <widget class="QPushButton" name="start_btn">
        <property name="text">

@@ -1,4 +1,3 @@
-
 from core.events import Event
 from core.plugin_loader import load_plugins
 from core.config_manager import ConfigManager
@@ -23,6 +22,7 @@ class Orchestrator:
 		self.modules = []
 		self.plugins = []
 		self.event_queue = []
+		self.gui = None  # Dodane do przechowywania referencji do GUI
 
 	def initialize(self):
 		"""Inicjalizuje wszystkie moduły i pluginy."""
@@ -49,6 +49,10 @@ class Orchestrator:
 		for plugin in self.plugins:
 			plugin.initialize(config)
 
+	def set_gui(self, gui):
+		"""Ustawia referencję do obiektu GUI."""
+		self.gui = gui
+
 	def run(self):
 		"""Główna pętla eventów."""
 		self.initialize()
@@ -65,8 +69,19 @@ class Orchestrator:
 				for obj in self.modules + self.plugins:
 					try:
 						result = obj.handle_event(event)
-						if isinstance(result, Event):
-							self.event_queue.append(result)
+						# Obsługa generatora (yield) - lista eventów lub pojedynczy event
+						if result:
+							if isinstance(result, Event):
+								self.event_queue.append(result)
+								# Przekazanie eventu do GUI jeśli jest ustawiony
+								if self.gui and result.type == "DEVICE_DETECTED":
+									self.gui.handle_event(result)
+							elif hasattr(result, '__iter__'):
+								for e in result:
+									if isinstance(e, Event):
+										self.event_queue.append(e)
+										if self.gui and e.type == "DEVICE_DETECTED":
+											self.gui.handle_event(e)
 					except Exception as e:
 						print(f"Błąd w module/pluginie {obj.__class__.__name__}: {e}")
 
