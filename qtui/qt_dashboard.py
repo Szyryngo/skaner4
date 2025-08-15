@@ -479,8 +479,12 @@ class DashboardTab(QWidget):
         """Eksportuje zapisane pakiety do pliku CSV"""
         from PyQt5.QtWidgets import QFileDialog
         import csv
+        from datetime import datetime
+        # proponowana nazwa pliku z datą i czasem
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        default_name = f"packets_{ts}.csv"
         # wybór pliku
-        path, _ = QFileDialog.getSaveFileName(self, "Zapisz CSV", "packets.csv", "CSV Files (*.csv)")
+        path, _ = QFileDialog.getSaveFileName(self, "Zapisz CSV", default_name, "CSV Files (*.csv)")
         if not path:
             return
         try:
@@ -500,7 +504,11 @@ class DashboardTab(QWidget):
         """Eksportuje zapisane pakiety do pliku PCAP"""
         from PyQt5.QtWidgets import QFileDialog
         try:
-            path, _ = QFileDialog.getSaveFileName(self, "Zapisz PCAP", "packets.pcap", "PCAP Files (*.pcap)")
+            from datetime import datetime
+            # proponowana nazwa pliku z datą i czasem
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            default_name = f"packets_{ts}.pcap"
+            path, _ = QFileDialog.getSaveFileName(self, "Zapisz PCAP", default_name, "PCAP Files (*.pcap)")
             if not path:
                 return
             # Zapis surowych bajtów do PCAP
