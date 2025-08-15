@@ -12,9 +12,9 @@
 - [x] Uzupełniono dokumentację qtui/qt_dashboard.py (patrz qt_dashboard.py.docstring.txt)
 
 ## Najbliższe zadania
-- [ ] Usprawnić przepływ eventów AI (każdy pakiet → cechy → AI → waga)
-- [ ] Rozbudować panel szczegółów o dekodowanie warstw protokołu
-- [ ] Umożliwić eksport przechwyconych pakietów do pliku (np. CSV, PCAP)
+- [ ] Usprawnić przepływ eventów AI (każdy pakiet → cechy → AI → waga)  <!-- w toku -->
+- [ ] Rozbudować panel szczegółów o dekodowanie warstw protokołu  <!-- w toku -->
+- [ ] Umożliwić eksport przechwyconych pakietów do pliku (np. CSV, PCAP)  <!-- w toku -->
 - [ ] Dodać testy jednostkowe dla orchestratora i GUI
 - [ ] Plugin: integracja z pyshark jako alternatywny backend sniffingu
 - [ ] Plugin: automatyczne powiadomienia (np. email, webhook)
