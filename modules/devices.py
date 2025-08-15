@@ -30,18 +30,13 @@ class DevicesModule(ModuleBase):
 
 	def generate_event(self):
 		"""
-		Generuje event DEVICE_DETECTED jeśli wykryto nowe urządzenie.
+		Generuje eventy DEVICE_INACTIVE dla hostów nieaktywnych powyżej timeout.
 		"""
-		# Oznaczaj hosty nieaktywne po określonym czasie
 		now = time.time()
+		# Znajdź hosty nieaktywne
 		to_remove = [ip for ip, ts in self.active_hosts.items() if now - ts > self.timeout]
 		for ip in to_remove:
+			# Usuń z listy aktywnych
 			del self.active_hosts[ip]
-		return None
-			
-		if hasattr(self, '_last_detected'):
-			ip = self._last_detected
-			print(f"[DevicesModule] Generuję DEVICE_DETECTED dla: {ip}")
-			del self._last_detected
-			return Event('DEVICE_DETECTED', {'ip': ip})
-		return None
+			# Publikuj event dla nieaktywnego urządzenia
+			yield Event('DEVICE_INACTIVE', {'ip': ip})

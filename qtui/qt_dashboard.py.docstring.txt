@@ -31,7 +31,8 @@
 - Zakładki do podglądu urządzeń, skanowania sieci i konfiguracji.
 
 ## Ostatnie zmiany
- - Dodano przyciski eksportu pakietów (CSV, PCAP) z domyślnymi nazwami plików zawierającymi timestamp (YYYYMMDD_HHMMSS).
+- Dodano przyciski eksportu pakietów (CSV, PCAP) z domyślnymi nazwami plików zawierającymi timestamp (YYYYMMDD_HHMMSS).
+- Dodano dekodowanie warstw protokołu: Scapy wyświetla struktury warstw, numer protokołu tłumaczony z `config/protocols.yaml`.
 
 ## Użytkowanie
 - Przejdź do zakładki Dashboard.
@@ -43,5 +44,4 @@
 
 ## W planie
 - Eventy AI: zoptymalizować przepływ (pakiet → `FeaturesModule` → `DetectionModule` → `ai_weight`).
-- Panel szczegółów: dodać dekodowanie warstw (np. `.show2()` z Scapy dla pełnej warstwowej analizy).
 - Eksport pakietów: zaimplementować przycisk eksportu do CSV i PCAP na pasku narzędzi lub menu.

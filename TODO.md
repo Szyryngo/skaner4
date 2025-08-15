@@ -13,7 +13,7 @@
 
 ## Najbliższe zadania
 - [x] Usprawniono przepływ eventów AI (każdy pakiet → cechy → AI → waga)  <!-- zaimplementowano pipeline w Orchestrator: CaptureModule → FeaturesModule → DetectionModule, sygnały Qt -->
-- [ ] Rozbudować panel szczegółów o dekodowanie warstw protokołu  <!-- w toku -->
+- [x] Rozbudować panel szczegółów o dekodowanie warstw protokołu  <!-- zaimplementowano: wyświetlanie warstw Scapy oraz tłumaczenie numerów protokołów z config/protocols.yaml -->
 - [x] Umożliwiono eksport przechwyconych pakietów do pliku (CSV, PCAP)  <!-- zaimplementowano przyciski Eksport CSV/PCAP, domyślne nazwy z timestampem (YYYYMMDD_HHMMSS) -->
 - [ ] Dodać testy jednostkowe dla orchestratora i GUI
 - [ ] Plugin: integracja z pyshark jako alternatywny backend sniffingu

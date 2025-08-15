@@ -11,6 +11,8 @@
 	- Czytelny wybór interfejsu sieciowego (QComboBox, testowanie i użycie wybranego interfejsu).
 	- Integracja orchestratora z GUI, automatyczne przekazywanie eventów.
 	- Kod jest gotowy do dalszej rozbudowy i testów.
+	 - Usprawniono przepływ eventów AI (pakiet → FeaturesModule → DetectionModule) za pomocą sygnałów Qt.
+	 - Dodano przyciski eksportu pakietów (CSV, PCAP) z domyślnymi nazwami zawierającymi timestamp (YYYYMMDD_HHMMSS).
 
 ## 📌 Cel projektu
 Jest to modularny, rozszerzalny system do:

@@ -1,4 +1,5 @@
 from modules.features import FeaturesModule
+from scapy.all import Ether
 from modules.detection import DetectionModule
 print('qt_dashboard.py: start import')
 import sys
@@ -8,6 +9,7 @@ from PyQt5.QtWidgets import (
 )
 import threading
 import yaml
+from core.config_manager import ConfigManager
 # Import layout classes for dynamic tabs
 from qtui.dashboard_layout import DashboardLayout
 from qtui.config_layout import ConfigLayout
@@ -59,6 +61,9 @@ class DashboardTab(QWidget):
         self.detail_info = self.findChild(QTextEdit, "detail_info")
         self.hex_view = self.findChild(QTextEdit, "hex_view")
         self.ascii_view = self.findChild(QTextEdit, "ascii_view")
+        # View for decoded protocol layers
+        # Upewnij się, że w dashboard.ui jest QTextEdit o obiekcie 'layer_view'
+        self.layer_view = self.findChild(QTextEdit, "layer_view")
         self.status_log = self.findChild(QTextEdit, "status_log")
 
         # Inicjalizacja pozostałych pól i logiki
@@ -172,6 +177,10 @@ class DashboardTab(QWidget):
             idx = [i for i, (ifn, _) in enumerate(self._iface_map) if ifn == iface]
             if idx:
                 self.interface_combo.setCurrentIndex(idx[0])
+
+        # Load protocol mappings from config
+        config_mgr = ConfigManager('config/protocols.yaml')
+        self.protocols = config_mgr.load()
 
     def _on_test_interfaces(self):
         if not hasattr(self, '_capture') or self._capture is None:
@@ -312,9 +321,10 @@ class DashboardTab(QWidget):
         src = meta.get('src_ip', '')
         dst = meta.get('dst_ip', '')
         proto_num = meta.get('protocol', '')
-        proto_map = {1: 'ICMP', 6: 'TCP', 17: 'UDP'}
+        # Translate protocol number to name using loaded config
         try:
-            proto = proto_map.get(int(proto_num), str(proto_num))
+            num = int(proto_num)
+            proto = self.protocols.get(num, str(num))
         except Exception:
             proto = str(proto_num)
         size = meta.get('payload_size', '')
@@ -408,6 +418,20 @@ class DashboardTab(QWidget):
             # HEX i ASCII
             self.hex_view.setText(self._format_hex(pkt_bytes))
             self.ascii_view.setText(self._format_ascii(pkt_bytes))
+            # Wyświetl dekodowanie warstw protokołu
+            try:
+                layers = Ether(pkt_bytes).show(dump=True)
+                # append decoded layers to detail_info
+                self.detail_info.append("\nWarstwy protokołu:\n" + layers)
+            except Exception as e:
+                self.log_status(f"Błąd dekodowania warstw: {e}")
+            # Decode protocol layers using Scapy
+            try:
+                layers = Ether(pkt_bytes).show(dump=True)
+                if self.layer_view:
+                    self.layer_view.setText(layers)
+            except Exception as e:
+                self.log_status(f"Błąd dekodowania warstw: {e}")
 
     def _format_hex(self, pkt_bytes):
         # HEX dump (16 bajtów na linię)

@@ -47,6 +47,7 @@ Opis wszystkich modułów, ich interfejsów i przeznaczenia.
   - Tworzy event `CONFIG_UPDATED`.
 -- **qtui/qt_dashboard.py** –
   - Natywny GUI PyQt5 (dashboard, zakładki: alerty, urządzenia, skaner, konfiguracja).
+  - Dodano metody `_on_export_csv` i `_on_export_pcap` do eksportu pakietów (CSV, PCAP) z domyślnymi nazwami plików zawierającymi timestamp (YYYYMMDD_HHMMSS).
 
 ---
 
@@ -86,8 +87,3 @@ Opis wszystkich modułów, ich interfejsów i przeznaczenia.
 - bezpieczny w rozbudowie,
 - odporny na awarie pojedynczych modułów.
 ```
-
----
-
-Następny będzie **ostatni z czterech głównych dokumentów** — `TODO.md` z listą zadań implementacyjnych dla Copilota.  
-Chcesz, żebym od razu dał go w całości, tak jak te poprzednie?
