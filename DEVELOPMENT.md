@@ -109,6 +109,3 @@ Event("TYPE", {"key": value})
 - Zero bezpośrednich wywołań kodu innego modułu (tylko eventy).
 ```
 
----
-
-Chcesz, żebym teraz podał **cały trzeci plik `MODULES.md`** w gotowym bloku, żeby lecieliśmy po kolei? Potem dam Ci ostatni plik `TODO.md`. Wtedy będziesz miał cały komplet dokumentów dla Copilota.

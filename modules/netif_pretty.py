@@ -2,6 +2,14 @@ from scapy.all import get_if_list, get_if_addr, get_if_hwaddr
 
 
 def _iface_type_label(iface):
+    """
+Parameters
+----------
+
+Returns
+-------
+
+"""
     name = iface.lower()
     if 'wi-fi' in name or 'wlan' in name or 'wireless' in name:
         return 'Wi-Fi'
@@ -14,6 +22,7 @@ def _iface_type_label(iface):
     if 'bluetooth' in name:
         return 'Bluetooth'
     return 'Inny'
+
 
 def get_interfaces_pretty():
     """
@@ -31,6 +40,6 @@ def get_interfaces_pretty():
         except Exception:
             mac = '-'
         label = _iface_type_label(iface)
-        pretty = f"{label} ({iface}, {ip}, {mac})"
+        pretty = f'{label} ({iface}, {ip}, {mac})'
         result.append((iface, pretty))
     return result

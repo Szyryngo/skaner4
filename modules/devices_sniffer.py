@@ -2,10 +2,20 @@ from scapy.all import sniff, ARP, IP
 from core.events import Event
 import threading
 
+
 class DevicesSniffer:
+    """
+Attributes
+----------
+
+Methods
+-------
+
+"""
+
     def __init__(self, iface=None, event_callback=None):
         self.iface = iface
-        self.event_callback = event_callback  # Funkcja do publikowania eventów
+        self.event_callback = event_callback
         self._thread = None
         self._stop = threading.Event()
 
@@ -20,19 +30,15 @@ class DevicesSniffer:
             self._thread.join(timeout=2)
 
     def _sniff_loop(self):
-        sniff(
-            iface=self.iface,
-            filter="arp or ip",
-            prn=self._handle_packet,
-            store=0,
-            stop_filter=lambda x: self._stop.is_set()
-        )
+        sniff(iface=self.iface, filter='arp or ip', prn=self._handle_packet,
+            store=0, stop_filter=lambda x: self._stop.is_set())
 
     def _handle_packet(self, pkt):
         if ARP in pkt:
             ip = pkt[ARP].psrc
             mac = pkt[ARP].hwsrc
-            event = Event('DEVICE_DETECTED', {'ip': ip, 'mac': mac, 'proto': 'ARP'})
+            event = Event('DEVICE_DETECTED', {'ip': ip, 'mac': mac, 'proto':
+                'ARP'})
             if self.event_callback:
                 self.event_callback(event)
         elif IP in pkt:

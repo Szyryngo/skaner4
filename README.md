@@ -31,7 +31,7 @@ Jest to modularny, rozszerzalny system do:
 ---
 
 ## 🛠 Technologia
-- **Python** 3.11+
+- **Python** 3.13+
 - **Sniffing**: scapy (w późniejszym etapie pyshark jako plugin)
 - **AI/ML**: scikit-learn, numpy, pandas
 - **UI**: PyQt5 (natywny GUI, multi-tab dashboard)
