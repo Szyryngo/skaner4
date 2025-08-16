@@ -18,6 +18,10 @@ Repozytorium: https://github.com/Szyryngo/skaner4
 	- Kod jest gotowy do dalszej rozbudowy i testów.
 	 - Usprawniono przepływ eventów AI (pakiet → FeaturesModule → DetectionModule) za pomocą sygnałów Qt.
 	 - Dodano przyciski eksportu pakietów (CSV, PCAP) z domyślnymi nazwami zawierającymi timestamp (YYYYMMDD_HHMMSS).
+ 	- Rozbudowano panel szczegółów: dekodowanie warstw protokołu (Scapy) oraz tłumaczenie numerów protokołów z config/protocols.yaml.
+ - Dodano zakładkę `Info` z informacjami o podzespołach komputera (CPU, RAM, GPU, BIOS, płyta główna, dyski, karty sieciowe).
+ - Dodano pasek narzędzi z metrykami systemu (CPU%, RAM%, liczba wątków i rdzeni) odświeżany co sekundę.
+ - Ustalono wersję **1.0.0** w tytule aplikacji oraz dodano `VERSIONING.md` z polityką wersjonowania.
 
 ## 📌 Cel projektu
 Jest to modularny, rozszerzalny system do:

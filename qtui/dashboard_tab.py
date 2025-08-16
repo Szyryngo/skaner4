@@ -237,24 +237,30 @@ class DashboardTab(QWidget):
             self.log_status(f'Błąd zapisu PCAP: {e}')
 
     def _show_packet_details_inline(self, row, _):
-        from datetime import datetime
+        # Retrieve raw bytes and AI weight
         from scapy.all import Ether
-        # Retrieve metadata
         m = self._packet_metas[row]
         raw = m.get('raw_bytes', b'')
-        # Decode packet layers
-        pkt = Ether(raw)
-        layer_info = pkt.show(dump=True)
-        # Include AI weight at top of details
         weight = m.get('ai_weight', 0)
-        layer_info = f"AI weight: {weight}\n" + layer_info
-        # Translate protocol numbers if configured
-        proto_num = m.get('protocol')
-        if isinstance(proto_num, int) or (isinstance(proto_num, str) and proto_num.isdigit()):
-            name = self.protocols_map.get(int(proto_num), None)
-            if name:
-                layer_info = layer_info.replace(f'Proto: {proto_num}', f'Proto: {name} ({proto_num})')
-        self.detail_info.setPlainText(layer_info)
-        # Hex and ASCII views
+        # Parse layers and fields with safety check
+        from scapy.packet import NoPayload
+        pkt = Ether(raw)
+        lines = [f"AI weight: {weight}\n"]
+        layer = pkt
+        while layer and not isinstance(layer, NoPayload):
+            lines.append(f"== Layer: {layer.name} ==\n")
+            # Iterate over fields in this layer
+            for field, value in layer.fields.items():
+                # Translate protocol numbers if configured
+                if field in ('proto', 'type') and isinstance(value, int):
+                    pname = self.protocols_map.get(value)
+                    if pname:
+                        value = f"{pname} ({value})"
+                lines.append(f"{field}: {value}\n")
+            # Move to next payload
+            layer = layer.payload if hasattr(layer, 'payload') else None
+        # Set detail view
+        self.detail_info.setPlainText(''.join(lines))
+        # Hex and ASCII views remain unchanged
         self.hex_view.setPlainText(' '.join(f'{b:02x}' for b in raw))
         self.ascii_view.setPlainText(''.join(chr(b) if 32 <= b < 127 else '.' for b in raw))

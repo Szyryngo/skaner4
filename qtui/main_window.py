@@ -1,37 +1,49 @@
 import sys
-from PyQt5.QtWidgets import QApplication, QMainWindow, QTabWidget
+VERSION = '1.0.0'
+import psutil
+from PyQt5.QtWidgets import QApplication, QMainWindow, QTabWidget, QToolBar, QLabel, QWidget, QSizePolicy
+from PyQt5.QtCore import QTimer, Qt
 from .dashboard_tab import DashboardTab
 from .devices_tab import DevicesTab
 from .scanner_tab import ScannerTab
 from .nn_tab import NNTab
 from .config_tab import ConfigTab
+from .soc_tab import SOCTab
+from .info_tab import InfoTab
 
 class MainWindow(QMainWindow):
     """Główne okno aplikacji z zakładkami"""
     def __init__(self):
         super().__init__()
-        self.setWindowTitle('AI Network Packet Analyzer Pro')
+        # Set fixed application version
+        self.setWindowTitle(f'AI Network Packet Analyzer Pro v{VERSION}')
         tabs = QTabWidget()
         self.setCentralWidget(tabs)
         # Stwórz instancje zakładek dla dalszych połączeń
         dash_tab = DashboardTab()
         dev_tab = DevicesTab()
         scan_tab = ScannerTab()
+        soc_tab = SOCTab()
         nn_tab = NNTab()
         config_tab = ConfigTab()
+        info_tab = InfoTab()
         # Dodaj zakładki
         tabs.addTab(dash_tab, 'Dashboard')
         tabs.addTab(dev_tab, 'Devices')
         tabs.addTab(scan_tab, 'Scanner')
+        tabs.addTab(soc_tab, 'SOC')
         tabs.addTab(nn_tab, 'NN')
         tabs.addTab(config_tab, 'Config')
-    # Propaguj zmianę silnika AI z Config do Dashboard
+        tabs.addTab(info_tab, 'Info')
+        # Propaguj zmianę silnika AI z Config do Dashboard
         if 'switch_ai_btn' in config_tab.ctrls and 'ai_combo' in config_tab.ctrls:
             config_tab.ctrls['switch_ai_btn'].clicked.connect(
                 lambda: (
                     setattr(dash_tab._detection_module, 'use_nn',
                             config_tab.ctrls['ai_combo'].currentText() == 'Neural Net'),
-                    dash_tab.log_status(f'Aktualny silnik AI: {config_tab.ctrls['ai_combo'].currentText()}')
+                    dash_tab.log_status(
+                        f"Aktualny silnik AI: {config_tab.ctrls['ai_combo'].currentText()}"
+                    )
                 )
             )
         # Ustaw domyślny rozmiar okna na 80% rozdzielczości ekranu
@@ -40,6 +52,38 @@ class MainWindow(QMainWindow):
         w = int(rect.width() * 0.8)
         h = int(rect.height() * 0.8)
         self.resize(w, h)
+        # Toolbar for system metrics
+        self._toolbar = QToolBar()
+        self._toolbar.setMovable(False)
+        self.addToolBar(Qt.TopToolBarArea, self._toolbar)
+        spacer = QWidget()
+        spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        self._toolbar.addWidget(spacer)
+        self._cpu_label = QLabel()
+        self._ram_label = QLabel()
+        self._threads_label = QLabel()
+        self._cores_label = QLabel()
+        for lbl in (self._cpu_label, self._ram_label, self._threads_label, self._cores_label):
+            lbl.setMargin(5)
+            self._toolbar.addWidget(lbl)
+        # Timer to update metrics every second
+        timer = QTimer(self)
+        timer.timeout.connect(self._update_metrics)
+        timer.start(1000)
+        self._update_metrics()
+
+    def _update_metrics(self):
+        # CPU usage
+        cpu = psutil.cpu_percent()
+        self._cpu_label.setText(f"CPU: {cpu}%")
+        # RAM usage
+        vm = psutil.virtual_memory()
+        self._ram_label.setText(f"RAM: {vm.percent}%")
+        # Threads and cores
+        threads = psutil.cpu_count(logical=True)
+        cores = psutil.cpu_count(logical=False)
+        self._threads_label.setText(f"Wątki: {threads}")
+        self._cores_label.setText(f"Rdzenie: {cores}")
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)

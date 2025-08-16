@@ -5,6 +5,9 @@ scikit-learn
 joblib
 numpy
 tensorflow
+py-cpuinfo
+GPUtil
+WMI
 
 # Użytkownicy Windows: jeśli instalacja TensorFlow zakończyła się niepowodzeniem z powodu ograniczeń długości ścieżek,
 # możesz włączyć obsługę długich ścieżek w Windows (więcej na https://pip.pypa.io/warnings/enable-long-paths)

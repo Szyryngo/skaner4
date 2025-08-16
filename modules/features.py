@@ -24,8 +24,15 @@ class FeaturesModule(ModuleBase):
 		Generuje event NEW_FEATURES na podstawie ostatniego pakietu (symulacja).
 		"""
         if hasattr(self, '_last_packet'):
-            features = {'flow_id': '1', 'packet_count': 1, 'total_bytes':
-                self._last_packet['payload_size']}
+            pkt = self._last_packet
+            # build feature set including packet origin
+            features = {
+                'flow_id': '1',
+                'packet_count': 1,
+                'total_bytes': pkt.get('payload_size', 0),
+                'src_ip': pkt.get('src_ip'),
+                'dst_ip': pkt.get('dst_ip')
+            }
             print(f'[FeaturesModule] Generuję NEW_FEATURES: {features}')
             del self._last_packet
             return Event('NEW_FEATURES', features)

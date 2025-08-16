@@ -12,7 +12,12 @@
 - [x] Uzupełniono dokumentację qtui/qt_dashboard.py (patrz qt_dashboard.py.docstring.txt)
 
 ## Najbliższe zadania
-- [x] Usprawniono przepływ eventów AI (każdy pakiet → cechy → AI → waga)  <!-- zaimplementowano pipeline w Orchestrator: CaptureModule → FeaturesModule → DetectionModule, sygnały Qt -->
+- [x] Dodano zakładkę `InfoTab` z informacjami o podzespołach komputera (CPU, RAM, GPU, BIOS, płyta główna, dyski, karty sieciowe)
+- [x] Dodano pasek narzędzi z metrykami systemu (CPU%, RAM%, liczba wątków i rdzeni) odświeżany co sekundę
+- [x] Ustalono wersję aplikacji na **1.0.0** i dodano `VERSIONING.md` z polityką wersjonowania
+  
+  <!-- dotychczasowe zadania -->
+  - [x] Usprawniono przepływ eventów AI (każdy pakiet → cechy → AI → waga)  <!-- zaimplementowano pipeline w Orchestrator: CaptureModule → FeaturesModule → DetectionModule, sygnały Qt -->
 - [x] Rozbudować panel szczegółów o dekodowanie warstw protokołu  <!-- zaimplementowano: wyświetlanie warstw Scapy oraz tłumaczenie numerów protokołów z config/protocols.yaml -->
 - [x] Umożliwiono eksport przechwyconych pakietów do pliku (CSV, PCAP)  <!-- zaimplementowano przyciski Eksport CSV/PCAP, domyślne nazwy z timestampem (YYYYMMDD_HHMMSS) -->
 - [ ] Dodać testy jednostkowe dla orchestratora i GUI
