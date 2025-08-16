@@ -14,7 +14,7 @@
 ## Najbliższe zadania
 - [x] Dodano zakładkę `InfoTab` z informacjami o podzespołach komputera (CPU, RAM, GPU, BIOS, płyta główna, dyski, karty sieciowe)
 - [x] Dodano pasek narzędzi z metrykami systemu (CPU%, RAM%, liczba wątków i rdzeni) odświeżany co sekundę
-- [x] Ustalono wersję aplikacji na **1.0.0** i dodano `VERSIONING.md` z polityką wersjonowania
+- [x] Ustalono wersję aplikacji na **1.1.0** i dodano `VERSIONING.md` z polityką wersjonowania
   
   <!-- dotychczasowe zadania -->
   - [x] Usprawniono przepływ eventów AI (każdy pakiet → cechy → AI → waga)  <!-- zaimplementowano pipeline w Orchestrator: CaptureModule → FeaturesModule → DetectionModule, sygnały Qt -->
@@ -25,6 +25,8 @@
 - [ ] Plugin: automatyczne powiadomienia (np. email, webhook)
 - [ ] Uprościć konfigurację filtrów BPF (UX)
 - [ ] Dodać testy jednostkowe dla zakładki Neural Net (NNLayout)
+- [ ] Rozszerzyć wielowątkowość programu: przenieść wszystkie blokujące operacje do workerów lub QThreadPool
+- [ ] Zoptymalizować wydajność skanowania i ogólną responsywność UI
  - [x] Rozbić `qtui/qt_dashboard.py` na:
      - `qtui/main_window.py` (klasa MainWindow)
      - `qtui/dashboard_tab.py`, `devices_tab.py`, `scanner_tab.py`, `nn_tab.py`, `config_tab.py` (oddzielne klasy zakładek)

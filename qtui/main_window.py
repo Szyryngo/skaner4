@@ -1,5 +1,5 @@
 import sys
-VERSION = '1.0.0'
+VERSION = '1.1.0'
 import psutil
 from PyQt5.QtWidgets import QApplication, QMainWindow, QTabWidget, QToolBar, QLabel, QWidget, QSizePolicy
 from PyQt5.QtCore import QTimer, Qt
@@ -59,11 +59,24 @@ class MainWindow(QMainWindow):
         spacer = QWidget()
         spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         self._toolbar.addWidget(spacer)
+        # Overall CPU percentage
         self._cpu_label = QLabel()
+        self._cpu_label.setMargin(5)
+        self._toolbar.addWidget(self._cpu_label)
+        # Per-core usage percentages
+        self._percore_labels = []
+        core_count = psutil.cpu_count(logical=True) or 0
+        if core_count > 1:
+            for i in range(core_count):
+                lbl = QLabel(f"C{i}: 0%")
+                lbl.setMargin(5)
+                self._toolbar.addWidget(lbl)
+                self._percore_labels.append(lbl)
+        # RAM, threads, cores
         self._ram_label = QLabel()
         self._threads_label = QLabel()
         self._cores_label = QLabel()
-        for lbl in (self._cpu_label, self._ram_label, self._threads_label, self._cores_label):
+        for lbl in (self._ram_label, self._threads_label, self._cores_label):
             lbl.setMargin(5)
             self._toolbar.addWidget(lbl)
         # Timer to update metrics every second
@@ -76,6 +89,11 @@ class MainWindow(QMainWindow):
         # CPU usage
         cpu = psutil.cpu_percent()
         self._cpu_label.setText(f"CPU: {cpu}%")
+        # Per-core usage
+        percore = psutil.cpu_percent(percpu=True)
+        for i, pct in enumerate(percore):
+            if i < len(self._percore_labels):
+                self._percore_labels[i].setText(f"C{i}: {pct}%")
         # RAM usage
         vm = psutil.virtual_memory()
         self._ram_label.setText(f"RAM: {vm.percent}%")

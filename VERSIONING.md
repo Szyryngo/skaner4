@@ -13,6 +13,7 @@
 # Zaczynamy od początkowego, stabilnego wydania:
 
 	- **1.0.0** — początkowe stabilne wydanie AI Network Packet Analyzer Pro.
+	- **1.1.0** — dodano asynchroniczny Ping-Sweep (Discovery) w osobnym wątku oraz ulepszono ScannerTab.
 
 ## Wytyczne dotyczące wydań
 
