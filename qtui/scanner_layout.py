@@ -27,5 +27,13 @@ Methods
         group.setLayout(group_layout)
         layout.addWidget(group)
         layout.addStretch()
+        # log poleceń w zakładce Scanner
+        from qtui.cmd_log_widget import create_cmd_log
+        cmd_log = create_cmd_log()
+        layout.addWidget(cmd_log)
         widget.setLayout(layout)
-        return widget, {'scan_btn': scan_btn, 'results': results}
+        return widget, {
+            'scan_btn': scan_btn,
+            'results': results,
+            'cmd_log': cmd_log
+        }

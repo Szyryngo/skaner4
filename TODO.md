@@ -20,11 +20,16 @@
 - [ ] Plugin: automatyczne powiadomienia (np. email, webhook)
 - [ ] Uprościć konfigurację filtrów BPF (UX)
 - [ ] Dodać testy jednostkowe dla zakładki Neural Net (NNLayout)
+ - [x] Rozbić `qtui/qt_dashboard.py` na:
+     - `qtui/main_window.py` (klasa MainWindow)
+     - `qtui/dashboard_tab.py`, `devices_tab.py`, `scanner_tab.py`, `nn_tab.py`, `config_tab.py` (oddzielne klasy zakładek)
+       (układ i logika każdej zakładki w osobnym pliku)
 - [x] Uzupełnić dokumentację projektu o instrukcje instalacji TensorFlow i obsługi długich ścieżek na Windows  <!-- zaimplementowano w requirements.txt -->
 - [ ] Rozbudować analyze_nn_model.py o generowanie raportu metryk trenowanego modelu
 - [x] Dodać walidację i obsługę błędów dla przycisków Trenuj/Oceń w NNLayout
 - [ ] Dodać internacjonalizację (i18n) komunikatów w zakładce NNLayout
-- [ ] Uzupełnić dokumentację NNLayout o opis funkcji treningu i oceny sieci
+- [x] Uzupełnić dokumentację NNLayout o opis funkcji treningu, oceny sieci i wyświetlania wyników w tabeli HTML
+ - [x] Wyświetlanie wyników ewaluacji modelu w profesjonalnej tabeli HTML
 
 # Filtrowanie pakietów
 - [x] Dodano przycisk `Ustaw filtr` i integrację BPF-filtra z CaptureModule.

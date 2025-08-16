@@ -1,6 +1,6 @@
 from core.interfaces import ModuleBase
 from core.events import Event
-from scapy.all import AsyncSniffer, raw, sniff
+from scapy.all import AsyncSniffer, raw, sniff, Ether, ARP
 
 
 class CaptureModule(ModuleBase):
@@ -60,30 +60,42 @@ Methods
             except Exception:
                 pass
 
+        # Callback for each captured packet
         def pkt_callback(pkt):
             try:
-                print(
-                    f'[CaptureModule][DEBUG] Otrzymałem pakiet: {pkt.summary()}'
-                    )
-                print(
-                    f'[CaptureModule][DEBUG] Typ warstwy głównej: {pkt.__class__.__name__}'
-                    )
+                print(f'[CaptureModule][DEBUG] Otrzymałem pakiet: {pkt.summary()}')
+                print(f'[CaptureModule][DEBUG] Typ warstwy głównej: {pkt.__class__.__name__}')
             except Exception:
                 pass
             try:
-                if pkt.haslayer('IP'):
-                    ip = pkt['IP']
-                    event = {'src_ip': ip.src, 'dst_ip': ip.dst, 'protocol':
-                        pkt.proto if hasattr(pkt, 'proto') else 'N/A',
-                        'payload_size': len(pkt), 'raw_bytes': bytes(raw(pkt))}
+                # Support IP and ARP packets for device detection
+                if pkt.haslayer('IP') or pkt.haslayer(ARP):
+                    if pkt.haslayer('IP'):
+                        ip_layer = pkt['IP']
+                        dst_ip = ip_layer.dst
+                        src_mac = pkt[Ether].src if pkt.haslayer(Ether) else None
+                        protocol = pkt.proto if hasattr(pkt, 'proto') else 'N/A'
+                    else:
+                        arp = pkt['ARP']
+                        ip_layer = arp
+                        dst_ip = arp.pdst
+                        src_mac = arp.hwsrc
+                        protocol = 'ARP'
+                    event = {
+                        'src_ip': ip_layer.src,
+                        'dst_ip': dst_ip,
+                        'src_mac': src_mac,
+                        'protocol': protocol,
+                        'payload_size': len(pkt),
+                        'raw_bytes': bytes(raw(pkt))
+                    }
                     self._last_packet = event
             except Exception as e:
                 print(f'[CaptureModule] Błąd przy analizie pakietu: {e}')
+
         iface = self.config.get('network_interface', None)
         flt = self.config.get('filter', '')
-        print(
-            f"[CaptureModule] Starting AsyncSniffer on iface={iface}, filter='{flt}'"
-            )
+        print(f"[CaptureModule] Starting AsyncSniffer on iface={iface}, filter='{flt}'")
         kwargs = {'prn': pkt_callback, 'iface': iface, 'store': False}
         if flt and flt.strip().lower() not in ('', 'nie filtruj', 'none'):
             kwargs['filter'] = flt

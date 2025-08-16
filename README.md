@@ -104,23 +104,10 @@ Program domyślnie uruchamia natywny GUI PyQt5 (main.py → qtui/qt_dashboard.py
 
 ### Funkcje GUI:
 - Dynamiczny wybór interfejsu sieciowego przez użytkownika (QComboBox)
-- Przycisk "Testuj interfejsy" – testuje sniffing na wszystkich interfejsach i pokazuje wyniki w oknie dialogowym
-- Dashboard, Live Devices, Network Scanner, Configuration – wszystko w jednym oknie
-
----
-
-## 🔌 Filozofia modułowa
 - Każdy moduł implementuje `ModuleBase` z `core/interfaces.py`.
-- Wszystkie moduły komunikują się przez eventy (klasa `Event` w `core/events.py`).
 - Dodanie nowej funkcji = dodanie nowego modułu lub pluginu, bez modyfikowania reszty kodu.
 
----
-
-## 📖 Dokumentacja developerska
-- Szczegółowy opis architektury, API i eventów: **DEVELOPMENT.md**
-- Opis wszystkich modułów i ich przeznaczenia: **MODULES.md**
 - Lista zadań implementacyjnych i testowych: **TODO.md**
-
 ## Opcjonalne modele AI
 - IsolationForest (zewnętrzny model w `data/models/isolation_forest.joblib`)
 - Sieć neuronowa (TensorFlow/Keras) – jeśli dodasz `tensorflow` do `requirements.txt`, w `DetectionModule` możesz wczytać `nn_model.h5` i używać predykcji pravdopodobieństwa anomalii.

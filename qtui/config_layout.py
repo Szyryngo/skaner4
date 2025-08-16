@@ -1,57 +1,80 @@
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QGroupBox, QFormLayout, QComboBox, QLineEdit, QHBoxLayout, QPushButton
+from PyQt5.QtWidgets import (
+    QWidget, QVBoxLayout, QLabel, QGroupBox, QHBoxLayout,
+    QComboBox, QPushButton, QLineEdit, QApplication
+)
+from qtui.cmd_log_widget import create_cmd_log
+from datetime import datetime
 
 
 class ConfigLayout:
     """
-Attributes
-----------
-
-Methods
--------
-
-"""
-    PRESETS = [('800 x 600', 800, 600), ('1024 x 768', 1024, 768), (
-        '1280 x 800', 1280, 800), ('1366 x 768', 1366, 768), ('1600 x 900',
-        1600, 900), ('1920 x 1080', 1920, 1080), ('2560 x 1440', 2560, 1440
-        ), ('3840 x 2160', 3840, 2160)]
+    Configuration tab layout: window size presets, AI engine selection, and command log.
+    """
 
     def build(self):
         widget = QWidget()
         layout = QVBoxLayout()
-        title = QLabel('Konfiguracja okna GUI')
-        title.setStyleSheet(
-            'font-size: 16px; font-weight: bold; margin-bottom: 10px;')
-        layout.addWidget(title)
-        group = QGroupBox('Rozmiar okna')
-        form = QFormLayout()
-        preset_combo = QComboBox()
-        for label, w, h in self.PRESETS:
-            preset_combo.addItem(label, (w, h))
-        width_input = QLineEdit()
-        height_input = QLineEdit()
-        width_input.setMaximumWidth(80)
-        height_input.setMaximumWidth(80)
-        wh_box = QHBoxLayout()
-        wh_box.addWidget(QLabel('Szerokość:'))
-        wh_box.addWidget(width_input)
-        wh_box.addWidget(QLabel('Wysokość:'))
-        wh_box.addWidget(height_input)
-        wh_box.addStretch()
-        form.addRow('Wybierz rozmiar:', preset_combo)
-        form.addRow('Ręcznie:', wh_box)
 
-        def on_preset(idx):
-            dims = preset_combo.itemData(idx)
-            if isinstance(dims, tuple) and len(dims) == 2:
-                width_input.setText(str(dims[0]))
-                height_input.setText(str(dims[1]))
-        preset_combo.currentIndexChanged.connect(on_preset)
-        on_preset(preset_combo.currentIndex())
-        apply_btn = QPushButton('Zastosuj rozmiar okna')
-        form.addRow(apply_btn)
-        group.setLayout(form)
-        layout.addWidget(group)
+        # Title
+        title = QLabel('Konfiguracja okna GUI')
+        title.setStyleSheet('font-size: 14px; font-weight: bold; margin-bottom: 10px;')
+        layout.addWidget(title)
+
+        # Group: Rozdzielczość okna jako dropdown
+        size_group = QGroupBox('Rozdzielczość okna')
+        size_layout = QHBoxLayout()
+        screen = QApplication.primaryScreen()
+        geom = screen.availableGeometry()
+        default_res = f"{geom.width()}x{geom.height()}"
+        res_combo = QComboBox()
+        popular_res = [
+            default_res,
+            '800x600', '1024x768', '1280x720', '1280x800', '1366x768',
+            '1440x900', '1600x900', '1680x1050', '1920x1080',
+            '2560x1440', '3840x2160'
+        ]
+        res_combo.addItems(popular_res)
+        res_combo.setToolTip('Wybierz rozdzielczość okna')
+        size_layout.addWidget(QLabel('Rozdzielczość:'))
+        size_layout.addWidget(res_combo)
+        apply_btn = QPushButton('Zastosuj rozdzielczość')
+        size_layout.addWidget(apply_btn)
+        size_group.setLayout(size_layout)
+        layout.addWidget(size_group)
+
+        # Group: Wybór silnika AI
+        ai_group = QGroupBox('Wybór silnika AI')
+        ai_layout = QHBoxLayout()
+        ai_combo = QComboBox()
+        ai_combo.addItems(['Isolation Forest', 'Neural Net'])
+        switch_btn = QPushButton('Zmień silnik AI')
+        check_btn = QPushButton('Sprawdź silnik AI')
+        ai_layout.addWidget(ai_combo)
+        ai_layout.addWidget(switch_btn)
+        ai_layout.addWidget(check_btn)
+        ai_group.setLayout(ai_layout)
+        layout.addWidget(ai_group)
+
+        # Current AI engine label
+        current_label = QLabel(f'Aktualnie używany: {ai_combo.currentText()}')
+        layout.addWidget(current_label)
+        ai_combo.currentIndexChanged.connect(
+            lambda idx, combo=ai_combo, lbl=current_label: lbl.setText(f'Aktualnie używany: {combo.itemText(idx)}')
+        )
+
         layout.addStretch()
+
+        # Command log
+        cmd_log = create_cmd_log()
+        layout.addWidget(cmd_log)
+
         widget.setLayout(layout)
-        return widget, {'preset_combo': preset_combo, 'width_input':
-            width_input, 'height_input': height_input, 'apply_btn': apply_btn}
+        return widget, {
+            'res_combo': res_combo,
+            'apply_btn': apply_btn,
+            'ai_combo': ai_combo,
+            'switch_ai_btn': switch_btn,
+            'check_ai_btn': check_btn,
+            'current_label': current_label,
+            'cmd_log': cmd_log
+        }

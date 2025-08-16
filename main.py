@@ -12,7 +12,7 @@ Returns
 -------
 
 """
-    from qtui.qt_dashboard import MainWindow
+    from qtui.main_window import MainWindow
     from PyQt5.QtWidgets import QApplication
     app = QApplication(sys.argv)
     print('QApplication instance before MainWindow:', QApplication.instance())

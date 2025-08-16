@@ -1,24 +1,20 @@
 from core.interfaces import ModuleBase
 from core.events import Event
-from flask import Flask
+from flask import Flask, request, redirect, url_for
 import threading
+import psutil
+import yaml
 
 
 class UIModule(ModuleBase):
     """
-Attributes
-----------
-
-Methods
--------
-
-"""
+    Moduł interfejsu webowego (Flask dashboard).
+    """
 
     def _get_real_interfaces(self):
-        import psutil
         ignore_keywords = ['virtual', 'vmware', 'loopback', 'bluetooth',
-            'tunnel', 'pseudo', 'miniport', 'tap', 'vpn', 'docker',
-            'hyper-v', 'npf']
+                           'tunnel', 'pseudo', 'miniport', 'tap', 'vpn', 'docker',
+                           'hyper-v', 'npf']
         interfaces = []
         for name, addrs in psutil.net_if_addrs().items():
             lname = name.lower()
@@ -39,6 +35,7 @@ Methods
         self._last_threat = None
         self._devices = []
         self._scan_results = []
+        self._scan_request_flag = False
         self._setup_routes()
         self.thread = threading.Thread(target=self._run_flask, daemon=True)
         self.thread.start()
@@ -47,38 +44,35 @@ Methods
 
         @self.app.route('/config', methods=['GET', 'POST'])
         def config():
-            import flask
             msg = ''
-            if flask.request.method == 'POST':
-                iface = flask.request.form.get('iface')
+            if request.method == 'POST':
+                iface = request.form.get('iface')
                 if iface:
-                    import yaml
-                    with open('config/config.yaml', 'r', encoding='utf-8'
-                        ) as f:
+                    with open('config/config.yaml', 'r', encoding='utf-8') as f:
                         cfg = yaml.safe_load(f)
                     cfg['network_interface'] = iface
-                    with open('config/config.yaml', 'w', encoding='utf-8'
-                        ) as f:
+                    with open('config/config.yaml', 'w', encoding='utf-8') as f:
                         yaml.safe_dump(cfg, f, allow_unicode=True)
-                    msg = (
-                        f"<p style='color:green;'>Wybrano interfejs: <b>{iface}</b></p>"
-                        )
+                    msg = f"<p style='color:green;'>Wybrano interfejs: <b>{iface}</b></p>"
             interfaces = self._get_real_interfaces()
             html = '<h2>Configuration</h2>' + msg
-            html += (
-                "<form method='post'><label for='iface'>Wybierz interfejs sieciowy:</label>"
-                )
+            html += "<form method='post'><label for='iface'>Wybierz interfejs sieciowy:</label>"
             html += "<select name='iface' id='iface'>"
             for iface in interfaces:
                 html += f"<option value='{iface}'>{iface}</option>"
             html += "</select> <button type='submit'>Zapisz</button></form>"
-            html += '<p>Obecny interfejs: <b>' + str(self.config.get(
-                'network_interface', 'brak')) + '</b></p>'
+            html += '<p>Obecny interfejs: <b>' + str(self.config.get('network_interface', 'brak')) + '</b></p>'
             return self._render_nav('config', html)
 
         @self.app.route('/')
-        def index():
-            return self._render_nav('dashboard')
+        @self.app.route('/dashboard', methods=['GET'])
+        def dashboard():
+            html = '<h2>Dashboard</h2>'
+            if self._last_threat:
+                html += f'<h3>Ostatni wykryty NEW_THREAT:</h3><pre>{self._last_threat}</pre>'
+            else:
+                html += '<p>Brak wykrytych zagrożeń.</p>'
+            return self._render_nav('dashboard', html)
 
         @self.app.route('/dashboard')
         def dashboard():
@@ -101,17 +95,25 @@ Methods
                 html += '<p>Brak wykrytych urządzeń.</p>'
             return self._render_nav('devices', html)
 
+        @self.app.route('/devices', methods=['GET'])
+        def devices():
+            html = '<h2>Live Devices</h2>'
+            if self._devices:
+                html += '<ul>' + ''.join(f'<li>{d}</li>' for d in self._devices) + '</ul>'
+            else:
+                html += '<p>Brak wykrytych urządzeń.</p>'
+            return self._render_nav('devices', html)
+
         @self.app.route('/scanner', methods=['GET'])
         def scanner():
-            html = """
-			<h2>Network Scanner</h2>
-			<form method='post' action='/scanner/scan'>
-				<button type='submit'>Uruchom skanowanie</button>
-			</form>
-			"""
+            html = (
+                "<h2>Network Scanner</h2>"
+                "<form method='post' action='/scanner/scan'>"
+                "<button type='submit'>Uruchom skanowanie</button>"
+                "</form>"
+            )
             if self._scan_results:
-                html += '<ul>' + ''.join(f'<li>{r}</li>' for r in self.
-                    _scan_results) + '</ul>'
+                html += '<ul>' + ''.join(f'<li>{r}</li>' for r in self._scan_results) + '</ul>'
             else:
                 html += '<p>Brak wyników skanowania.</p>'
             return self._render_nav('scanner', html)
@@ -119,45 +121,13 @@ Methods
         @self.app.route('/scanner/scan', methods=['POST'])
         def scanner_scan():
             self._scan_request_flag = True
-            from flask import redirect, url_for
             return redirect(url_for('scanner'))
 
     def generate_event(self):
-        if hasattr(self, '_scan_request_flag') and self._scan_request_flag:
+        if self._scan_request_flag:
             self._scan_request_flag = False
             return Event('SCAN_REQUEST', {})
         return None
-
-        @self.app.route('/config', methods=['GET', 'POST'])
-        def config():
-            import flask
-            msg = ''
-            if flask.request.method == 'POST':
-                iface = flask.request.form.get('iface')
-                if iface:
-                    import yaml
-                    with open('config/config.yaml', 'r', encoding='utf-8'
-                        ) as f:
-                        cfg = yaml.safe_load(f)
-                    cfg['network_interface'] = iface
-                    with open('config/config.yaml', 'w', encoding='utf-8'
-                        ) as f:
-                        yaml.safe_dump(cfg, f, allow_unicode=True)
-                    msg = (
-                        f"<p style='color:green;'>Wybrano interfejs: <b>{iface}</b></p>"
-                        )
-            interfaces = self._get_real_interfaces()
-            html = '<h2>Configuration</h2>' + msg
-            html += (
-                "<form method='post'><label for='iface'>Wybierz interfejs sieciowy:</label>"
-                )
-            html += "<select name='iface' id='iface'>"
-            for iface in interfaces:
-                html += f"<option value='{iface}'>{iface}</option>"
-            html += "</select> <button type='submit'>Zapisz</button></form>"
-            html += '<p>Obecny interfejs: <b>' + str(self.config.get(
-                'network_interface', 'brak')) + '</b></p>'
-            return self._render_nav('config', html)
 
     def _render_nav(self, active, content=None):
         nav = f"""
@@ -174,8 +144,7 @@ Methods
 
     def _run_flask(self):
         port = self.config.get('ui_port', 5000)
-        self.app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False
-            )
+        self.app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
 
     def handle_event(self, event):
         if event.type == 'NEW_THREAT':
