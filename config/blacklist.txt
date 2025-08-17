@@ -1,0 +1,5 @@
+# Lista czarnych adresów IP (Threat Intelligence)
+# Wpisz po jednej wartości IP lub CIDR per linia
+# Przykład:
+# 192.168.1.100
+# 10.0.0.0/24

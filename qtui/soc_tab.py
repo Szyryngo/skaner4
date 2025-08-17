@@ -1,10 +1,43 @@
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QGraphicsScene, QFileDialog, QTableWidgetItem, QTabWidget, QGraphicsTextItem, QGraphicsItem, QGraphicsLineItem
 from PyQt5.QtGui import QPen, QBrush
-from PyQt5.QtCore import Qt, QTimer, QLineF
+from PyQt5.QtCore import Qt, QThread, pyqtSignal, QObject, pyqtSlot, QLineF, QTimer
 from .soc_layout import SOCLayout
 from core.events import Event
+import threading
+from core.device_discovery import discover_and_update
 from datetime import datetime
 from modules.devices import DevicesModule
+
+class SOCWorker(QObject):
+    """Worker to process capture->features->detection in background."""
+    raw_event = pyqtSignal(object)
+    threat = pyqtSignal(object)
+    def __init__(self, capture, features, detection):
+        super().__init__()
+        self.capture = capture
+        self.features = features
+        self.detection = detection
+        self.running = True
+
+    @pyqtSlot()
+    def run(self):
+        while self.running:
+            ev = self.capture.generate_event()
+            if ev:
+                # emit raw for device detection and map drawing
+                self.raw_event.emit(ev)
+                # AI processing
+                self.features.handle_event(ev)
+                fe = self.features.generate_event()
+                if fe:
+                    self.detection.handle_event(fe)
+                    th = self.detection.generate_event()
+                    if th:
+                        # enrich threat event
+                        th.data['src_ip'] = ev.data.get('src_ip')
+                        th.data['dst_ip'] = ev.data.get('dst_ip')
+                        self.threat.emit(th)
+            QThread.msleep(100)
 
 class SOCTab(QWidget):
     """Zakładka SIEM/SOC: dashboard security logs and alerts"""
@@ -17,6 +50,9 @@ class SOCTab(QWidget):
         self.setLayout(layout)
         # Controls
         self.ctrls = ctrls
+        # Enable alert filtering
+        if 'filter_input' in self.ctrls:
+            self.ctrls['filter_input'].textChanged.connect(self._on_filter_alerts)
         # Setup network map scene
         self.scene = QGraphicsScene(self)
         self.ctrls['map_view'].setScene(self.scene)
@@ -36,20 +72,28 @@ class SOCTab(QWidget):
         from modules.capture import CaptureModule
         from modules.features import FeaturesModule
         from modules.detection import DetectionModule
-        self._capture = CaptureModule(); self._capture.initialize({'network_interface': None, 'filter': ''})
-        self._features = FeaturesModule(); self._features.initialize({})
-        self._detection = DetectionModule(); self._detection.initialize({})
+        self._capture = CaptureModule()
+        self._capture.initialize({'network_interface': None, 'filter': ''})
+        self._features = FeaturesModule()
+        self._features.initialize({})
+        self._detection = DetectionModule()
+        self._detection.initialize({'network_interface': None, 'filter': ''})
         # State
         self._live = False
         self._scheduled = False
-        # Timers
-        from PyQt5.QtCore import QTimer
-        self._log_timer = QTimer(self)
-        self._log_timer.timeout.connect(self._process_events)
-        self._log_timer.start(100)
-        # Scheduler timer for periodic scans
-        self._sched_timer = QTimer(self)
-        self._sched_timer.timeout.connect(self._start_scheduled_scan)
+        # Start background threat detection worker
+        self._worker = SOCWorker(self._capture, self._features, self._detection)
+        # Create thread without parent to prevent premature destruction
+        self._thread = QThread()
+        self._thread.setParent(None)
+        self._worker.moveToThread(self._thread)
+        self._thread.started.connect(self._worker.run)
+        self._worker.threat.connect(self._on_worker_threat)
+        self._worker.raw_event.connect(self._on_raw_event)
+        self._thread.start()
+        # Ensure worker thread stops on application quit
+        from PyQt5.QtWidgets import qApp
+        qApp.aboutToQuit.connect(self._stop_worker_thread)
         # Connect UI buttons
         self.ctrls['live_btn'].clicked.connect(self._toggle_live)
         self.ctrls['scheduled_btn'].clicked.connect(self._toggle_scheduled)
@@ -59,6 +103,52 @@ class SOCTab(QWidget):
         self._log('SOC tab initialized')
         # Install click filter on map for node info
         self.ctrls['map_view'].viewport().installEventFilter(self)
+        # Load Threat Intelligence blacklist
+        import os, ipaddress
+        self._blacklist = []
+        bl_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'config', 'blacklist.txt'))
+        try:
+            with open(bl_path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith('#'):
+                        continue
+                    try:
+                        net = ipaddress.ip_network(line)
+                        self._blacklist.append(net)
+                    except ValueError:
+                        continue
+        except Exception:
+            pass
+        # Load MAC OUI mapping for node labeling
+        import yaml, os
+        map_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'config', 'mac_devices.yaml'))
+        try:
+            with open(map_path, 'r', encoding='utf-8') as f:
+                self._mac_map = yaml.safe_load(f) or {}
+        except Exception:
+            self._mac_map = {}
+        # Load Snort rules plugins for packet inspection
+        from core.plugin_loader import load_plugins
+        plugins_cfg = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'config', 'plugins_config.yaml'))
+        plugins_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'plugins'))
+        self._snort_plugins = load_plugins(plugins_cfg, plugins_dir)
+        # Ustawienia powiadomień (threshold i e-mail)
+        import yaml, os
+        cfg_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'config', 'config.yaml'))
+        try:
+            with open(cfg_path, 'r', encoding='utf-8') as f:
+                app_cfg = yaml.safe_load(f) or {}
+        except:
+            app_cfg = {}
+        # Load notification settings
+        notif_cfg = app_cfg.get('siem', {})
+        self._notif_threshold = notif_cfg.get('notification_threshold', 0)
+        self._email_recipients = notif_cfg.get('notification_emails', [])
+        self._smtp_server = notif_cfg.get('smtp_server', '')
+        self._smtp_port = notif_cfg.get('smtp_port', 25)
+        self._smtp_user = notif_cfg.get('smtp_user', '')
+        self._smtp_pass = notif_cfg.get('smtp_pass', '')
 
     def _toggle_live(self):
         self._live = not self._live
@@ -76,6 +166,18 @@ class SOCTab(QWidget):
                 pass
         state = 'Live Monitoring ON' if self._live else 'Live Monitoring OFF'
         self._log(state)
+    def _stop_worker_thread(self):
+        """Stop the SOC worker thread cleanly before application exit."""
+        try:
+            self._worker.running = False
+            try:
+                self._capture.stop_sniffing()
+            except Exception:
+                pass
+            self._thread.quit()
+            self._thread.wait()
+        except Exception:
+            pass
     def eventFilter(self, source, event):
         from PyQt5.QtCore import QEvent
         from PyQt5.QtWidgets import QMessageBox
@@ -116,62 +218,79 @@ class SOCTab(QWidget):
         # delegate to capture module or scanner
         self._capture.handle_event(Event('SCAN_REQUEST', None))
 
-    def _process_events(self):
+    @pyqtSlot(object)
+    def _on_worker_threat(self, event):
+        # Only process if live or scheduled
         if not self._live and not self._scheduled:
             return
-        # capture event
-        ev = self._capture.generate_event()
-        if not ev:
+        # add alert UI and update node color
+        self._add_alert(event)
+        ip = event.data.get('ip')
+        weight = event.data.get('ai_weight', 0)
+        if ip:
+            self._update_node_color(ip, weight)
+    
+    @pyqtSlot(object)
+    def _on_raw_event(self, ev):
+        # Process raw packet events for network map
+        if not self._live and not self._scheduled:
             return
-        # ensure nodes exist for src and dst
         src = ev.data.get('src_ip')
         dst = ev.data.get('dst_ip')
+        # MAC addresses
+        src_mac = ev.data.get('src_mac')
+        dst_mac = ev.data.get('dst_mac')
+        # Process through Snort rules plugins
+        for plugin in getattr(self, '_snort_plugins', []):
+            alert = plugin.handle_event(ev)
+            if alert and alert.type == 'SNORT_ALERT':
+                self._add_alert(alert)
+        # Device detection for source
         if src and src not in self._nodes:
-            self._add_device(Event('DEVICE_DETECTED', {'ip': src}))
+            self._add_device(Event('DEVICE_DETECTED', {'ip': src, 'mac': src_mac}))
+            if src_mac:
+                prefix = ':'.join(src_mac.split(':')[:3]).upper()
+                threading.Thread(
+                    target=discover_and_update,
+                    args=(src, src_mac, prefix, ''),
+                    kwargs={'callback': None},
+                    daemon=True
+                ).start()
+        # Device detection for destination
         if dst and dst not in self._nodes:
-            self._add_device(Event('DEVICE_DETECTED', {'ip': dst}))
-        # draw live communication line between nodes
+            self._add_device(Event('DEVICE_DETECTED', {'ip': dst, 'mac': dst_mac}))
+            if dst_mac:
+                prefix = ':'.join(dst_mac.split(':')[:3]).upper()
+                threading.Thread(
+                    target=discover_and_update,
+                    args=(dst, dst_mac, prefix, ''),
+                    kwargs={'callback': None},
+                    daemon=True
+                ).start()
+        # Draw line between nodes
         if src in self._node_positions and dst in self._node_positions:
             x1, y1 = self._node_positions[src]
             x2, y2 = self._node_positions[dst]
             line = QGraphicsLineItem(QLineF(x1, y1, x2, y2))
             line.setPen(QPen(Qt.blue))
             self.scene.addItem(line)
-            # remove line after 2 seconds
+            # remove line after 2s
             QTimer.singleShot(2000, lambda l=line: self.scene.removeItem(l))
-        # device discovery: feed packet to devices module
-        for dev_ev in self._devices.handle_event(ev) or []:
-            if dev_ev.type == 'DEVICE_DETECTED':
-                self._add_device(dev_ev)
-        # features
-        self._features.handle_event(ev)
-        fe = self._features.generate_event()
-        if fe:
-            self._detection.handle_event(fe)
-            th = self._detection.generate_event()
-            if th:
-                # enrich threat event with original packet IPs
-                th.data['src_ip'] = ev.data.get('src_ip')
-                th.data['dst_ip'] = ev.data.get('dst_ip')
-                self._add_alert(th)
-                # update node color based on threat ai_weight
-                ip = th.data.get('ip')
-                weight = th.data.get('ai_weight', 0)
-                self._update_node_color(ip, weight)
 
     def _add_alert(self, event):
         tbl = self.ctrls['log_table']
         from PyQt5.QtWidgets import QTableWidgetItem
+        from datetime import datetime
         # Insert new alert at top so newest entries appear first
         tbl.insertRow(0)
         ts = event.data.get('timestamp', datetime.now().strftime('%H:%M:%S'))
         evname = event.type
         weight = event.data.get('ai_weight', 0)
         sev = 'Low' if weight < 0.5 else 'Medium' if weight < 1.5 else 'High'
+        # Fill alert row
         tbl.setItem(0, 0, QTableWidgetItem(ts))
         tbl.setItem(0, 1, QTableWidgetItem(evname))
         tbl.setItem(0, 2, QTableWidgetItem(sev))
-        # Additional details: source, destination, confidence
         src = event.data.get('src_ip', '') or event.data.get('ip', '')
         dst = event.data.get('dst_ip', '')
         conf_val = event.data.get('confidence', event.data.get('ai_weight', 0))
@@ -179,6 +298,36 @@ class SOCTab(QWidget):
         tbl.setItem(0, 3, QTableWidgetItem(src))
         tbl.setItem(0, 4, QTableWidgetItem(dst))
         tbl.setItem(0, 5, QTableWidgetItem(conf))
+        # Update summary counts
+        low = sum(1 for r in range(tbl.rowCount()) if tbl.item(r,2).text() == 'Low')
+        med = sum(1 for r in range(tbl.rowCount()) if tbl.item(r,2).text() == 'Medium')
+        high = sum(1 for r in range(tbl.rowCount()) if tbl.item(r,2).text() == 'High')
+        self.ctrls['low_label'].setText(f"Low: {low}")
+        self.ctrls['medium_label'].setText(f"Medium: {med}")
+        self.ctrls['high_label'].setText(f"High: {high}")
+        # Highlight blacklisted IPs in alerts
+        from PyQt5.QtGui import QColor
+        import ipaddress
+        src = event.data.get('src_ip', '')
+        dst = event.data.get('dst_ip', '')
+        def is_black(ip_str):
+            try:
+                ip_obj = ipaddress.ip_address(ip_str)
+                return any(ip_obj in net for net in self._blacklist)
+            except Exception:
+                return False
+        if is_black(src) or is_black(dst):
+            # color entire row red background
+            for c in range(tbl.columnCount()):
+                item = tbl.item(0, c)
+                if item:
+                    item.setBackground(QColor('#ffcccc'))
+        # Zaawansowane powiadomienia: e-mail jeśli AI weight przekracza threshold
+        try:
+            if float(weight) >= float(self._notif_threshold) and self._smtp_server and self._email_recipients:
+                self._send_email_notification(event)
+        except Exception:
+            pass
     def _add_device(self, event):
         # Add a node to the network map
         ip = event.data.get('ip')
@@ -217,6 +366,16 @@ class SOCTab(QWidget):
         cy = y + 10
         self._nodes[ip] = (ellipse, text)
         self._node_positions[ip] = (cx, cy)
+        # Label with MAC vendor and device type if available
+        mac = event.data.get('mac')
+        if mac:
+            prefix = ':'.join(mac.split(':')[:3]).upper()
+            dev_info = self._mac_map.get(prefix, {})
+            vendor = dev_info.get('manufacturer', '')
+            dev_type = dev_info.get('type', '')
+            if vendor or dev_type:
+                label = f"{ip}\n{vendor} {dev_type}".strip()
+                text.setPlainText(label)
 
     def _export_siem(self):
         """Eksportuj logi SOC do pliku CSV lub innego formatu."""
@@ -289,3 +448,52 @@ class SOCTab(QWidget):
         else:
             color = Qt.red
         ellipse.setBrush(QBrush(color))
+    
+    def _send_email_notification(self, event):
+        """Send email notification for SOC event if threshold exceeded."""
+        try:
+            import smtplib
+            from email.mime.text import MIMEText
+            from datetime import datetime
+            # Prepare message content
+            ts = event.data.get('timestamp', datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+            evname = event.type
+            weight = event.data.get('ai_weight', 0)
+            src = event.data.get('src_ip', '') or event.data.get('ip', '')
+            dst = event.data.get('dst_ip', '')
+            body = (f"Time: {ts}\n"
+                    f"Event: {evname}\n"
+                    f"AI Weight: {weight}\n"
+                    f"Source IP: {src}\n"
+                    f"Destination IP: {dst}\n")
+            msg = MIMEText(body)
+            msg['Subject'] = f"SOC Alert: {evname} (Weight {weight})"
+            sender = self._smtp_user or f"no-reply@{self._smtp_server}"
+            msg['From'] = sender
+            msg['To'] = ','.join(self._email_recipients)
+            # Connect to SMTP server
+            server = smtplib.SMTP(self._smtp_server, self._smtp_port)
+            server.ehlo()
+            if self._smtp_user and self._smtp_pass:
+                server.starttls()
+                server.login(self._smtp_user, self._smtp_pass)
+            server.sendmail(sender, self._email_recipients, msg.as_string())
+            server.quit()
+            self._log(f"Email sent to {msg['To']}: {evname}, weight {weight}")
+        except Exception as e:
+            self._log(f"Failed to send email notification: {e}")
+
+    def _on_filter_alerts(self, text):
+        """Filtruj wyświetlane alerty w tabeli zgodnie z wpisanym tekstem."""
+        tbl = self.ctrls.get('log_table')
+        if not tbl:
+            return
+        filter_text = text.lower()
+        for r in range(tbl.rowCount()):
+            row_matches = False
+            for c in range(tbl.columnCount()):
+                item = tbl.item(r, c)
+                if item and filter_text in item.text().lower():
+                    row_matches = True
+                    break
+            tbl.setRowHidden(r, not row_matches)

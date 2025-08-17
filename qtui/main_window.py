@@ -1,5 +1,5 @@
 import sys
-VERSION = '1.3.5 stable'
+VERSION = '1.4.0 stable'
 import psutil
 from PyQt5.QtWidgets import QApplication, QMainWindow, QTabWidget, QToolBar, QLabel, QWidget, QSizePolicy
 from PyQt5.QtCore import QTimer, Qt
@@ -9,6 +9,7 @@ from .scanner_tab import ScannerTab
 from .nn_tab import NNTab
 from .config_tab import ConfigTab
 from .soc_tab import SOCTab
+from .snort_rules_tab import SnortRulesTab
 from .info_tab import InfoTab
 
 class MainWindow(QMainWindow):
@@ -26,6 +27,11 @@ class MainWindow(QMainWindow):
         soc_tab = SOCTab()
         nn_tab = NNTab()
         config_tab = ConfigTab()
+        snort_rules_tab = SnortRulesTab(  # pass plugin instances
+            soc_tab._snort_plugins
+        )
+        # Keep reference for proper thread shutdown
+        self._soc_tab = soc_tab
         info_tab = InfoTab()
         # Dodaj zakładki
         tabs.addTab(dash_tab, 'Dashboard')
@@ -34,6 +40,7 @@ class MainWindow(QMainWindow):
         tabs.addTab(soc_tab, 'SOC')
         tabs.addTab(nn_tab, 'NN')
         tabs.addTab(config_tab, 'Config')
+        tabs.addTab(snort_rules_tab, 'Reguły SNORT')
         tabs.addTab(info_tab, 'Info')
         # Propaguj zmianę silnika AI z Config do Dashboard
         if 'switch_ai_btn' in config_tab.ctrls and 'ai_combo' in config_tab.ctrls:
@@ -84,6 +91,9 @@ class MainWindow(QMainWindow):
         timer.timeout.connect(self._update_metrics)
         timer.start(1000)
         self._update_metrics()
+        # Ensure SOC thread stops when application quits
+        from PyQt5.QtWidgets import qApp
+        qApp.aboutToQuit.connect(self._cleanup)
 
     def _update_metrics(self):
         # CPU usage
@@ -102,6 +112,24 @@ class MainWindow(QMainWindow):
         cores = psutil.cpu_count(logical=False)
         self._threads_label.setText(f"Wątki: {threads}")
         self._cores_label.setText(f"Rdzenie: {cores}")
+    def _cleanup(self):
+        """Stop SOC background thread cleanly."""
+        try:
+            if hasattr(self, '_soc_tab'):
+                worker = getattr(self._soc_tab, '_worker', None)
+                thread = getattr(self._soc_tab, '_thread', None)
+                if worker:
+                    worker.running = False
+                if thread:
+                    thread.quit()
+                    thread.wait()
+        except Exception:
+            pass
+
+    def closeEvent(self, event):
+        """Handle window close event by cleaning up threads."""
+        self._cleanup()
+        super().closeEvent(event)
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)

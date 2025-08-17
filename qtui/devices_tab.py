@@ -6,6 +6,7 @@ from datetime import datetime
 import ipaddress
 from scapy.all import arping, Ether
 import psutil, ipaddress, socket
+import yaml, os
 
 from qtui.devices_layout import DevicesLayout
 
@@ -27,6 +28,15 @@ class DevicesTab(QWidget):
             # Log initial load
             self.ctrls['cmd_log'].append(f"[{datetime.now().strftime('%H:%M:%S')}] Urządzenia załadowane")  
         
+        # Load MAC OUI mapping for device identification
+        mac_cfg_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'config', 'mac_devices.yaml'))
+        try:
+            with open(mac_cfg_path, 'r', encoding='utf-8') as f:
+                mac_map = yaml.safe_load(f) or {}
+        except Exception:
+            mac_map = {}
+        # Normalize keys: uppercase without trailing colon
+        self._mac_map = {k.rstrip(':').upper(): v for k, v in mac_map.items()}
         # Initialize capture and devices modules for live updates  
         self._capture = CaptureModule()  
         self._capture.initialize({'network_interface': None, 'filter': ''})  
@@ -88,6 +98,11 @@ class DevicesTab(QWidget):
                     self.ctrls['devices'].setItem(row, 2, QTableWidgetItem(time_str))  
                     self.ctrls['devices'].setItem(row, 3, QTableWidgetItem(str(count)))  
                     self.ctrls['devices'].setItem(row, 4, QTableWidgetItem('Active'))  
+                    # Identify device type by MAC OUI and display in the 'Typ' column
+                    oui = ':'.join(mac.split(':')[:3]).upper()
+                    info = self._mac_map.get(oui, {})
+                    dtype = f"{info.get('manufacturer','Unknown')} ({info.get('type','Unknown')})"
+                    self.ctrls['devices'].setItem(row, 5, QTableWidgetItem(dtype))
                     self.ctrls['cmd_log'].append(f"[{datetime.now().strftime('%H:%M:%S')}] Wykryto urządzenie: {ip} {mac}")  
                 elif e.type == 'DEVICE_INACTIVE':  
                     ip = e.data['ip']  
@@ -136,4 +151,12 @@ class DevicesTab(QWidget):
             tbl.setItem(row, 2, QTableWidgetItem(ts))
             tbl.setItem(row, 3, QTableWidgetItem('1'))
             tbl.setItem(row, 4, QTableWidgetItem('Active'))
+            # MAC OUI lookup
+            mac_oui = self._mac_map.get(mac.upper(), 'Nieznany')
+            tbl.setItem(row, 5, QTableWidgetItem(mac_oui))  
+            # Identify device type by MAC OUI
+            prefix = ':'.join(mac.split(':')[:3]).upper()
+            info = self._mac_map.get(prefix, {})
+            dtype = f"{info.get('manufacturer','Unknown')} ({info.get('type','Unknown')})"
+            tbl.setItem(row, 6, QTableWidgetItem(dtype))
         self.ctrls['cmd_log'].append(f"[{datetime.now().strftime('%H:%M:%S')}] ARP scan zakończony, znaleziono {len(ans)} urządzeń")

@@ -14,31 +14,20 @@ Methods
 """
 
     def test_all_interfaces(self):
-        """Testuje sniffing na wszystkich interfejsach i loguje, czy pojawiają się pakiety."""
+        """Testuje sniffing na wszystkich interfejsach (diagnostyka)."""
         from modules.netif import list_interfaces
         from scapy.all import sniff
-        print(
-            '[CaptureModule] Testowanie sniffingu na wszystkich interfejsach...'
-            )
+        # Debug logging suppressed
         results = {}
         for iface in list_interfaces():
-            print(f'[CaptureModule] Test interfejsu: {iface}')
             packets = []
             try:
                 sniff(prn=lambda pkt: packets.append(pkt), iface=iface,
-                    timeout=2, count=1, store=0)
+                      timeout=2, count=1, store=0)
                 results[iface] = len(packets)
-                if packets:
-                    print(f'[CaptureModule] Interfejs {iface}: wykryto pakiet!'
-                        )
-                else:
-                    print(f'[CaptureModule] Interfejs {iface}: brak pakietów.')
-            except Exception as e:
-                print(f'[CaptureModule] Błąd na interfejsie {iface}: {e}')
-                results[iface] = f'Błąd: {e}'
-        print('[CaptureModule] Wyniki testu interfejsów:')
-        for iface, res in results.items():
-            print(f'  {iface}: {res}')
+            except Exception:
+                results[iface] = 'Error'
+        # Return dict of interface: packet count or 'Error'
         return results
 
     def set_interface(self, iface):
@@ -54,6 +43,7 @@ Methods
 
     def _start_sniffing(self):
         """Startuje lub restartuje Sniffer z aktualnym filtrem i interfejsem"""
+        # Stop existing sniffer if running
         if hasattr(self, '_sniffer') and self._sniffer:
             try:
                 self._sniffer.stop()
@@ -63,12 +53,6 @@ Methods
         # Callback for each captured packet
         def pkt_callback(pkt):
             try:
-                print(f'[CaptureModule][DEBUG] Otrzymałem pakiet: {pkt.summary()}')
-                print(f'[CaptureModule][DEBUG] Typ warstwy głównej: {pkt.__class__.__name__}')
-            except Exception:
-                pass
-            try:
-                # Support IP and ARP packets for device detection
                 if pkt.haslayer('IP') or pkt.haslayer(ARP):
                     if pkt.haslayer('IP'):
                         ip_layer = pkt['IP']
@@ -83,6 +67,7 @@ Methods
                         src_mac = arp.hwsrc
                         dst_mac = arp.hwdst if hasattr(arp, 'hwdst') else None
                         protocol = 'ARP'
+
                     event = {
                         'src_ip': ip_layer.src,
                         'dst_ip': dst_ip,
@@ -93,26 +78,28 @@ Methods
                         'raw_bytes': bytes(raw(pkt))
                     }
                     self._last_packet = event
-            except Exception as e:
-                print(f'[CaptureModule] Błąd przy analizie pakietu: {e}')
-
-        iface = self.config.get('network_interface', None)
-        flt = self.config.get('filter', '')
-        print(f"[CaptureModule] Starting AsyncSniffer on iface={iface}, filter='{flt}'")
-        kwargs = {'prn': pkt_callback, 'iface': iface, 'store': False}
-        if flt and flt.strip().lower() not in ('', 'nie filtruj', 'none'):
-            kwargs['filter'] = flt
-        self._sniffer = AsyncSniffer(**kwargs)
-        self._sniffer.daemon = True
-        self._sniffer.start()
-
-    def stop_sniffing(self):
-        """Zatrzymuje aktywny sniffer"""
-        if hasattr(self, '_sniffer') and self._sniffer:
-            try:
-                self._sniffer.stop()
             except Exception:
                 pass
+
+        # Configure and start AsyncSniffer
+        iface = self.config.get('network_interface', None)
+        flt = self.config.get('filter', '')
+        kwargs = {
+            'prn': pkt_callback,
+            'iface': iface,
+            'store': False
+        }
+
+        if flt and flt.strip().lower() not in ('', 'nie filtruj', 'none'):
+            kwargs['filter'] = flt
+
+        self._sniffer = AsyncSniffer(**kwargs)
+        try:
+            self._sniffer.daemon = False
+        except Exception:
+            pass
+
+        self._sniffer.start()
 
     def set_filter(self, bpf):
         """Ustawia nowy BPF-filter i resetuje sniffer"""
@@ -127,12 +114,9 @@ Methods
         """
 		Zwraca event NEW_PACKET na podstawie przechwyconego pakietu przez scapy.
 		"""
-        print(
-            f'[CaptureModule] generate_event: self._last_packet={self._last_packet}'
-            )
+        # Debug prints disabled to avoid buffered stdout issues
         if self._last_packet:
             pkt = self._last_packet
-            print(f'[CaptureModule] generate_event: zwracam event z pkt={pkt}')
             self._last_packet = None
             return Event('NEW_PACKET', pkt)
         return None

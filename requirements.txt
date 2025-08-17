@@ -9,6 +9,8 @@ tensorflow>=2.13.0
 py-cpuinfo>=8.0.0
 GPUtil>=1.4.0
 WMI>=1.6.0
+requests>=2.20.0  # for fetching IEEE OUI registry
+python-nmap>=0.6.1  # for Nmap scanning integration
 
 # Uwagi dotyczące instalacji specyficzne dla platformy:
 # Zobacz README.md dla instrukcji dotyczących Windows (długie ścieżki, TensorFlow CPU-only itp.)

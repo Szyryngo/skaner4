@@ -21,7 +21,7 @@ Repozytorium: https://github.com/Szyryngo/skaner4
  	- Rozbudowano panel szczegółów: dekodowanie warstw protokołu (Scapy) oraz tłumaczenie numerów protokołów z config/protocols.yaml.
  - Dodano zakładkę `Info` z informacjami o podzespołach komputera (CPU, RAM, GPU, BIOS, płyta główna, dyski, karty sieciowe).
  - Dodano pasek narzędzi z metrykami systemu (CPU%, RAM%, liczba wątków i rdzeni) odświeżany co sekundę.
- - Ustalono wersję **1.2.0** w tytule aplikacji oraz zaktualizowano `VERSIONING.md` z polityką wersjonowania; dodano:
+- Ustalono wersję **1.4.0** w tytule aplikacji oraz zaktualizowano `VERSIONING.md` z polityką wersjonowania; dodano:
 	 - eksport przechwyconych pakietów do CSV i PCAP (okno zapisu, domyślne nazwy z timestamp);
 	 - panel szczegółów pakietu (dekodowanie warstw, HEX, ASCII);
 	 - mapowanie numerów protokołów z `config/protocols.yaml`;

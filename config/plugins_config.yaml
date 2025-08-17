@@ -2,3 +2,6 @@ plugins:
   - path: example_plugin.py
     class: ExamplePlugin
     enabled: true
+  - path: snort_rules_plugin.py
+    class: SnortRulesPlugin
+    enabled: true

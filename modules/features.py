@@ -16,7 +16,8 @@ class FeaturesModule(ModuleBase):
     def handle_event(self, event):
         """Obsługuje event NEW_PACKET, agreguje do flow i loguje do konsoli."""
         if event.type == 'NEW_PACKET':
-            print(f'[FeaturesModule] Otrzymano NEW_PACKET: {event.data}')
+            # Debug logging disabled to avoid stdout contention
+            # print(f'[FeaturesModule] Otrzymano NEW_PACKET: {event.data}')
             self._last_packet = event.data
 
     def generate_event(self):
@@ -33,7 +34,8 @@ class FeaturesModule(ModuleBase):
                 'src_ip': pkt.get('src_ip'),
                 'dst_ip': pkt.get('dst_ip')
             }
-            print(f'[FeaturesModule] Generuję NEW_FEATURES: {features}')
+            # Debug logging disabled to avoid stdout contention
+            # print(f'[FeaturesModule] Generuję NEW_FEATURES: {features}')
             del self._last_packet
             return Event('NEW_FEATURES', features)
         return None

@@ -1,0 +1,5 @@
+# Sample Snort rules
+# Each rule should be in Snort rules syntax, e.g.:
+# alert tcp any any -> any any (msg:"Test rule"; content:"GET"; sid:1000001; rev:1;)
+
+# Add your Snort rules below

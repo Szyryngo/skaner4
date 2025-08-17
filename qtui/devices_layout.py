@@ -26,9 +26,9 @@ Methods
         # Group box for active devices table
         group = QGroupBox('Aktywne urządzenia w sieci')
         group_layout = QVBoxLayout()
-        devices = QTableWidget(0, 5)
+        devices = QTableWidget(0, 6)
         devices.setHorizontalHeaderLabels([
-            'IP', 'MAC', 'Ostatnio widziany', 'Pakiety', 'Status'
+            'IP', 'MAC', 'Ostatnio widziany', 'Pakiety', 'Status', 'Typ'
         ])
         devices.setSelectionBehavior(QAbstractItemView.SelectRows)
         devices.setEditTriggers(QAbstractItemView.NoEditTriggers)

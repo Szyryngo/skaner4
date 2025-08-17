@@ -22,30 +22,31 @@ class DetectionModule(ModuleBase):
         try:
             import tensorflow as tf
             self.nn_model = tf.keras.models.load_model(self.nn_model_path)
-            print(f'[DetectionModule] Załadowano model NN z {self.nn_model_path}')
+            # Debug: NN model loaded
             self.use_nn = True
         except Exception:
-            print('[DetectionModule] Brak modelu NN lub brak TensorFlow, będzie używany IsolationForest')
+            # Debug: NN model unavailable, falling back to IsolationForest
+            pass
         # Load or train Isolation Forest model
         from sklearn.ensemble import IsolationForest
         try:
             from joblib import load
             self.if_model = load(self.if_model_path)
-            print(f'[DetectionModule] Załadowano model IF z {self.if_model_path}')
+            # Debug: IF model loaded
         except Exception:
-            print('[DetectionModule] Brak modelu IF, trenuję nowy model...')
+            # Debug: IF model missing, training new model
             X0 = np.random.normal(0, 1, (100, 3))
             self.if_model = IsolationForest(contamination=0.1, random_state=42)
             self.if_model.fit(X0)
             from joblib import dump
             os.makedirs(os.path.dirname(self.if_model_path), exist_ok=True)
             dump(self.if_model, self.if_model_path)
-            print(f'[DetectionModule] Zapisano nowy model IF do {self.if_model_path}')
+            # Debug: New IF model saved
 
     def handle_event(self, event):
         """Obsługuje event NEW_FEATURES, wykonuje detekcję AI."""
         if event.type == 'NEW_FEATURES':
-            print(f'[DetectionModule] Otrzymano NEW_FEATURES: {event.data}')
+            # Debug logging disabled
             features = event.data
             X = [float(features.get('packet_count', 0)), float(features.get
                 ('total_bytes', 0)), float(features.get('flow_id', 0))]
@@ -73,7 +74,7 @@ class DetectionModule(ModuleBase):
                     'ai_weight': prob,
                     'details': features
                 }
-                print(f'[DetectionModule] NN wykryło zagrożenie: {threat}')
+                # Debug: NN detected threat
                 return Event('NEW_THREAT', threat)
             return None
         # Fallback to Isolation Forest
@@ -87,6 +88,6 @@ class DetectionModule(ModuleBase):
                 'ai_weight': float(-score),
                 'details': features
             }
-            print(f'[DetectionModule] IF wykryło zagrożenie: {threat}')
+            # Debug: IF detected threat
             return Event('NEW_THREAT', threat)
         return None

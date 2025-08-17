@@ -12,13 +12,18 @@ Returns
 -------
 
 """
-    from qtui.main_window import MainWindow
-    from PyQt5.QtWidgets import QApplication
-    app = QApplication(sys.argv)
-    print('QApplication instance before MainWindow:', QApplication.instance())
-    window = MainWindow()
-    window.show()
-    sys.exit(app.exec_())
+    # Initialize and run the Qt GUI, catching any exceptions during setup or execution
+    try:
+        from qtui.main_window import MainWindow
+        from PyQt5.QtWidgets import QApplication
+        app = QApplication(sys.argv)
+        window = MainWindow()
+        window.show()
+        sys.exit(app.exec_())
+    except Exception:
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
 
 
 if __name__ == '__main__':

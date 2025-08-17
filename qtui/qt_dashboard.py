@@ -1,7 +1,7 @@
 from modules.features import FeaturesModule
 from scapy.all import Ether
 from modules.detection import DetectionModule
-print('qt_dashboard.py: start import')
+# print('qt_dashboard.py: start import')
 import sys
 from PyQt5.QtWidgets import QApplication, QMainWindow, QTabWidget, QWidget, QVBoxLayout, QLabel, QPushButton, QListWidget, QGroupBox, QTableWidget, QTableWidgetItem, QAbstractItemView, QSplitter, QTextEdit, QHBoxLayout, QDialog, QComboBox
 import threading
@@ -23,7 +23,7 @@ try:
     qRegisterMetaType(QTextCursor, 'QTextCursor')
 except ImportError:
     pass
-print('qt_dashboard.py: przed PacketDetailDialog')
+# print('qt_dashboard.py: przed PacketDetailDialog')
 
 
 class PacketDetailDialog(QDialog):
@@ -53,7 +53,7 @@ Methods
         self.setLayout(layout)
 
 
-print('qt_dashboard.py: przed DashboardTab')
+# print('qt_dashboard.py: przed DashboardTab')
 
 
 class DashboardTab(QWidget):
@@ -90,7 +90,6 @@ Methods
         self.detail_info = self.findChild(QTextEdit, 'detail_info')
         self.hex_view = self.findChild(QTextEdit, 'hex_view')
         self.ascii_view = self.findChild(QTextEdit, 'ascii_view')
-        self.layer_view = self.findChild(QTextEdit, 'layer_view')
         self.status_log = self.findChild(QTextEdit, 'status_log')
         from modules.netif_pretty import get_interfaces_pretty
         self._iface_map = get_interfaces_pretty()
@@ -136,6 +135,8 @@ Methods
         self.packets.setStyleSheet(
             'QTableWidget {selection-background-color: #2196F3;}')
         self.packets.cellClicked.connect(self._show_packet_details_inline)
+        # Double-click to open detailed dialog
+        self.packets.cellDoubleClicked.connect(self._show_packet_detail_dialog)
         self.detail_info.setPlaceholderText(
             'Wybierz pakiet, aby zobaczyć szczegóły...')
         self.status_log.setStyleSheet(
@@ -146,6 +147,15 @@ Methods
         from modules.capture import CaptureModule
         self._capture = CaptureModule()
         self._capture.initialize({})
+        # Protocol number to name mapping for display
+        self.protocols = {1: 'ICMP', 6: 'TCP', 17: 'UDP'}
+        # Initialize AI pipeline modules
+        from modules.features import FeaturesModule
+        self._features_module = FeaturesModule()
+        self._features_module.initialize({})
+        from modules.detection import DetectionModule
+        self._detection_module = DetectionModule()
+        self._detection_module.initialize({})
         # Inicjalizacja danych pakietów
         self._packet_data = []
         self._packet_metas = []  # metadane do eksportu i podglądu
@@ -181,12 +191,6 @@ Methods
             idx = [i for i, (ifn, _) in enumerate(self._iface_map) if ifn == iface]
             if idx:
                 self.interface_combo.setCurrentIndex(idx[0])
-        # Wczytanie mapy protokołów
-        proto_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'config', 'protocols.yaml'))
-        self.protocols = ConfigManager(proto_path).load()
-        # Inicjalizacja modułów AI
-        self._features_module = FeaturesModule(); self._features_module.initialize({})
-        self._detection_module = DetectionModule(); self._detection_module.initialize({})
         # Automatyczne rozpoczęcie przechwytywania
         self._on_start_sniffing()
 
@@ -333,16 +337,13 @@ Methods
             while layer and not isinstance(layer, NoPayload):
                 lines.append(f"== Layer: {layer.name} ==\n")
                 for field, value in layer.fields.items():
-                    # Tłumaczenie numerów protokołów, jeśli mapa dostępna
                     if field in ('proto', 'type') and isinstance(value, int):
-                        pname = None
-                        if isinstance(self.protocols, dict):
-                            pname = self.protocols.get(value)
+                        pname = self.protocols.get(value)
                         if pname:
                             value = f"{pname} ({value})"
                     lines.append(f"{field}: {value}\n")
                 layer = layer.payload if hasattr(layer, 'payload') else None
-            # Wyświetl szczegóły
+            # Wyświetl szczegóły pakietu
             self.detail_info.setPlainText(''.join(lines))
             # Wyświetl HEX
             self.hex_view.setPlainText(' '.join(f"{b:02x}" for b in raw))
@@ -350,6 +351,19 @@ Methods
             self.ascii_view.setPlainText(''.join(chr(b) if 32 <= b < 127 else '.' for b in raw))
         except Exception as e:
             self.log_status(f"Nie można wyświetlić szczegółów pakietu: {e}")
+
+    def _show_packet_detail_dialog(self, row, col):
+        """Open packet details in a separate dialog."""
+        try:
+            meta = self._packet_metas[row]
+            raw = meta.get('raw_bytes', b'')
+            # Prepare hex and ascii strings
+            hex_data = ' '.join(f"{b:02x}" for b in raw)
+            ascii_data = ''.join(chr(b) if 32 <= b < 127 else '.' for b in raw)
+            dialog = PacketDetailDialog(row+1, hex_data, ascii_data, self)
+            dialog.exec_()
+        except Exception as e:
+            self.log_status(f"Nie można otworzyć okna szczegółów pakietu: {e}")
 
     def _set_bpf_filter(self, bpf):
         if not bpf or bpf.strip().lower().startswith('nie filtruj'):
@@ -483,7 +497,9 @@ Methods
 
     def _process_packet(self, event):
         """Oblicza AI weight i przygotowuje metadane pakietu."""
+        # Copy event data and preserve raw bytes for detail panels
         meta = event.data.copy()
+        meta['raw_bytes'] = event.data.get('raw_bytes', b'')
         # Timestamp
         from datetime import datetime
         meta['timestamp'] = datetime.now().strftime('%H:%M:%S')
@@ -512,10 +528,18 @@ Methods
                 score = float(self._detection_module.if_model.decision_function(X)[0])
                 weight = abs(score)
         meta['ai_weight'] = round(weight, 2)
+        # Run Snort rules plugins
+        for plugin in getattr(self, '_snort_plugins', []):
+            res = plugin.handle_event(event)
+            if res and res.type == 'SNORT_ALERT':
+                # Log and emit UI alert
+                self.log_status(f"[SNORT ALERT] SID:{res.data.get('sid')} MSG:{res.data.get('msg')}")
         return meta
 
     def _insert_packet_row(self, meta):
         """Wstawia przetworzony pakiet do GUI."""
+        # Store metadata and insert row at top
+        self._packet_metas.insert(0, meta)
         # Insert row at top
         self._packet_counter += 1
         self.packets.insertRow(0)

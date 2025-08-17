@@ -20,7 +20,11 @@ def load_plugins(config_path, plugins_dir):
         try:
             module = importlib.import_module(f'plugins.{module_name}')
             plugin_class = getattr(module, plugin_info.get('class', 'Plugin'))
-            plugins.append(plugin_class())
+            plugin = plugin_class()
+            # Initialize plugin with optional config
+            plugin.initialize(plugin_info.get('config', {}))
+            plugins.append(plugin)
         except Exception as e:
-            print(f'Błąd ładowania pluginu {module_name}: {e}')
+            # print(f'Błąd ładowania pluginu {module_name}: {e}')
+            pass
     return plugins
