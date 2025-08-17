@@ -274,8 +274,10 @@ Methods
     def _on_export_csv(self):
         """Eksportuj pakiety do pliku CSV"""
         from PyQt5.QtWidgets import QFileDialog
+        from datetime import datetime
+        default_name = f"packets_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
         try:
-            path, _ = QFileDialog.getSaveFileName(self, 'Zapisz CSV', '', 'CSV (*.csv)')
+            path, _ = QFileDialog.getSaveFileName(self, 'Zapisz CSV', default_name, 'CSV (*.csv)')
             if not path:
                 self.log_status('Eksport CSV anulowany')
                 return
@@ -303,7 +305,9 @@ Methods
         from PyQt5.QtWidgets import QFileDialog
         from scapy.all import wrpcap, Ether
         try:
-            path, _ = QFileDialog.getSaveFileName(self, 'Zapisz PCAP', '', 'PCAP (*.pcap)')
+            from datetime import datetime
+            default_pcap = f"packets_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pcap"
+            path, _ = QFileDialog.getSaveFileName(self, 'Zapisz PCAP', default_pcap, 'PCAP (*.pcap)')
             if not path:
                 self.log_status('Eksport PCAP anulowany')
                 return

@@ -1,5 +1,5 @@
 # Dokumentacja: qtui/qt_dashboard.py
-# Wersja: 1.3.0
+# Wersja: 1.3.5 stable
 # Data: 2025-08-17
 
 ## Kluczowe klasy i metody
@@ -33,12 +33,13 @@
 - Zakładki do podglądu urządzeń, skanowania sieci i konfiguracji.
 
 ## Ostatnie zmiany
-- Wersja 0.2.0 (2025-08-17):
-  - Usunięto lokalny import ThreadPoolExecutor (naprawiono UnboundLocalError).
-  - Dodano eksport pakietów do CSV (_on_export_csv) i PCAP (_on_export_pcap) z nazwami plików zawierającymi timestamp.
-  - Wprowadzono mapowanie numerów protokołów z pliku config/protocols.yaml.
-  - Uporządkowano wątki: dwa dla AI pipeline, jeden dla operacji na bazie SQLite.
-  - Usunięto prototypowe fragmenty profilowania AI.
+- Wersja 1.3.5 stable (2025-08-17):
+  - Zaimplementowano asynchroniczne skanowanie w ScannerTab (QThread + workers).
+  - Dodano eksport raportów w ScannerTab (CSV) oraz w SOC (CSV/JSON) z domyślnymi nazwami zawierającymi timestamp i możliwością edycji.
+  - DashboardTab: domyślnie podpowiadane nazwy plików dla eksportu CSV i PCAP z możliwością zmiany.
+  - SOC: alerty w logu wstawiane od najnowszych; dodano kolumny src_mac/dst_mac w CaptureModule oraz logowanie MAC.
+  - Poprawiono wcięcia w CaptureModule pkt_callback i usunięto lokalny import ThreadPoolExecutor.
+  - Zaktualizowano numer wersji w GUI i dokumentacji do 1.3.5 stable.
 
 ## Użytkowanie
 - Przejdź do zakładki Dashboard.

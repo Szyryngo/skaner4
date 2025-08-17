@@ -132,12 +132,14 @@ class ScannerTab(QWidget):
         if 'export_btn' in self.ctrls:
             self.ctrls['export_btn'].clicked.connect(self._on_export)
         # Timer for polling scan results
-        self._scan_timer = QTimer(self)
-        self._scan_timer.timeout.connect(self._process_scan_result)
-        self._scan_timer.start(1000)
+        # self._scan_timer = QTimer(self)
+        # self._scan_timer.timeout.connect(self._process_scan_result)
+        # self._scan_timer.start(1000)
         # Initial log
         if 'cmd_log' in self.ctrls:
             self.ctrls['cmd_log'].append(f"[{datetime.now().strftime('%H:%M:%S')}] ScannerTab initialized")
+        self._scan_thread = None
+        self._scan_worker = None
 
     def _on_start_scan(self):
         scan_type = self.ctrls['scan_type_combo'].currentText()
@@ -164,15 +166,30 @@ class ScannerTab(QWidget):
             except Exception:
                 ports_list = []
 
-        # Trigger scan
-        self._scanner_module.handle_event(
-            Event('SCAN_REQUEST', {
-                'type': scan_type,
-                'target': target,
-                'subtype': subtype,
-                'ports': ports_list
-            })
-        )
+        # Uruchom asynchroniczny skan w osobnym wątku
+        if scan_type == 'Port Scan':
+            self._scan_thread = QThread()
+            self._scan_worker = PortScanWorker(target, ports_list)
+            self._scan_worker.moveToThread(self._scan_thread)
+            self._scan_thread.started.connect(self._scan_worker.run)
+            self._scan_worker.progress.connect(self.ctrls['progress_bar'].setValue)
+            self._scan_worker.log.connect(lambda msg: self.ctrls['cmd_log'].append(msg))
+            self._scan_worker.finished.connect(self._on_port_scan_finished)
+            self._scan_worker.finished.connect(self._scan_thread.quit)
+            self._scan_thread.start()
+        elif scan_type == 'Discovery':
+            self._scan_thread = QThread()
+            self._scan_worker = DiscoveryWorker(target)
+            self._scan_worker.moveToThread(self._scan_thread)
+            self._scan_thread.started.connect(self._scan_worker.run)
+            self._scan_worker.progress.connect(self.ctrls['progress_bar'].setValue)
+            self._scan_worker.log.connect(lambda msg: self.ctrls['cmd_log'].append(msg))
+            self._scan_worker.finished.connect(self._on_discovery_finished)
+            self._scan_worker.finished.connect(self._scan_thread.quit)
+            self._scan_thread.start()
+        else:
+            # fallback: sync module
+            self._scanner_module.handle_event(Event('SCAN_REQUEST', {'type': scan_type, 'target': target,'subtype': subtype,'ports': ports_list}))
 
         # Clear results table
         table = self.ctrls.get('results_table')
@@ -197,72 +214,35 @@ class ScannerTab(QWidget):
                 f"[{now}] Parametry skanowania: zakres={target}, tryb={scan_type}, port_mode={subtype}, porty={ports}"
             )
 
-        # If Port Scan, perform scan immediately with progress and detailed log
-        if scan_type == 'Port Scan':
-            # Disable polling of generate_event to avoid blocking UI
-            self._scan_timer.stop()
-            # Start asynchronous port scan
-            table = self.ctrls.get('results_table')
-            progress = self.ctrls.get('progress_bar')
-            if table and progress:
-                table.setRowCount(0)
-                # Thread and worker setup
-                self._scan_thread = QThread(self)
-                self._scan_worker = PortScanWorker(target, ports_list)
-                self._scan_worker.moveToThread(self._scan_thread)
-                # Connect signals
-                self._scan_thread.started.connect(self._scan_worker.run)
-                self._scan_worker.progress.connect(progress.setValue)
-                self._scan_worker.log.connect(lambda msg: self.ctrls['cmd_log'].append(msg))
-                def on_finished(open_ports, mac):
-                    from PyQt5.QtWidgets import QTableWidgetItem
-                    # Populate results
-                    table.insertRow(0)
-                    table.setItem(0, 0, QTableWidgetItem(target))
-                    table.setItem(0, 1, QTableWidgetItem(','.join(map(str, open_ports))))
-                    table.setItem(0, 2, QTableWidgetItem(mac))
-                    table.setItem(0, 3, QTableWidgetItem(''))
-                    # Final log
-                    now = datetime.now().strftime('%H:%M:%S')
-                    self.ctrls['cmd_log'].append(f"[{now}] Port Scan zakończony: otwarte porty={open_ports}")
-                    # Clean up thread
-                    self._scan_thread.quit()
-                    self._scan_thread.wait()
-                self._scan_worker.finished.connect(on_finished)
-                # Start thread
-                self._scan_thread.start()
-            return
-        # If Discovery, use DiscoveryWorker in thread
-        if scan_type == 'Discovery':
-            self._scan_timer.stop()
-            progress = self.ctrls.get('progress_bar')
-            if progress:
-                progress.setValue(0)
-            self._disc_thread = QThread(self)
-            self._disc_worker = DiscoveryWorker(target)
-            self._disc_worker.moveToThread(self._disc_thread)
-            # Connect signals
-            self._disc_thread.started.connect(self._disc_worker.run)
-            self._disc_worker.progress.connect(progress.setValue)
-            self._disc_worker.log.connect(lambda msg: self.ctrls['cmd_log'].append(msg))
-            def on_disc_finished(results):
-                from PyQt5.QtWidgets import QTableWidgetItem
-                table = self.ctrls.get('results_table')
-                if table:
-                    table.setRowCount(0)
-                    for row, item in enumerate(results):
-                        table.insertRow(row)
-                        table.setItem(row, 0, QTableWidgetItem(item['ip']))
-                        table.setItem(row, 2, QTableWidgetItem(item.get('mac','')))
-                now = datetime.now().strftime('%H:%M:%S')
-                self.ctrls['cmd_log'].append(f"[{now}] Discovery zakończony: znaleziono {len(results)} hostów")
-                # Clean up
-                self._disc_thread.quit()
-                self._disc_thread.wait()
-                self._scan_timer.start(1000)
-            self._disc_worker.finished.connect(on_disc_finished)
-            self._disc_thread.start()
-            return
+    def _on_port_scan_finished(self, open_ports, mac):
+        """Obsługa zakończenia port scan"""
+        table = self.ctrls.get('results_table')
+        if table:
+            table.setRowCount(0)
+            from PyQt5.QtWidgets import QTableWidgetItem
+            for row, port in enumerate(open_ports):
+                table.insertRow(row)
+                table.setItem(row, 0, QTableWidgetItem(self.ctrls['target_input'].text()))
+                table.setItem(row, 1, QTableWidgetItem(str(port)))
+                table.setItem(row, 2, QTableWidgetItem(mac))
+                table.setItem(row, 3, QTableWidgetItem(''))
+        now = datetime.now().strftime('%H:%M:%S')
+        self.ctrls['cmd_log'].append(f"[{now}] Port scan zakończony: {open_ports}")
+
+    def _on_discovery_finished(self, results):
+        """Obsługa zakończenia discovery scan"""
+        table = self.ctrls.get('results_table')
+        if table:
+            table.setRowCount(0)
+            from PyQt5.QtWidgets import QTableWidgetItem
+            for row, item in enumerate(results):
+                table.insertRow(row)
+                table.setItem(row, 0, QTableWidgetItem(item['ip']))
+                table.setItem(row, 1, QTableWidgetItem(''))
+                table.setItem(row, 2, QTableWidgetItem(item.get('mac','')))
+                table.setItem(row, 3, QTableWidgetItem(''))
+        now = datetime.now().strftime('%H:%M:%S')
+        self.ctrls['cmd_log'].append(f"[{now}] Discovery zakończony: {len(results)} hostów")
 
     def _process_scan_result(self):
         ev = self._scanner_module.generate_event()
@@ -298,5 +278,26 @@ class ScannerTab(QWidget):
         pass
 
     def _on_export(self):
-        # Placeholder for export to SIEM action
-        pass
+        """Eksport wyników skanowania do pliku CSV."""
+        from PyQt5.QtWidgets import QFileDialog
+        from datetime import datetime
+        default_name = f"scan_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+        path, _ = QFileDialog.getSaveFileName(self, 'Zapisz wyniki skanowania', default_name, 'CSV (*.csv)')
+        if not path:
+            self.ctrls['cmd_log'].append('Eksport skanowania anulowany')
+            return
+        import csv
+        table = self.ctrls.get('results_table')
+        try:
+            with open(path, 'w', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+                # nagłówki
+                headers = [table.horizontalHeaderItem(i).text() for i in range(table.columnCount())]
+                writer.writerow(headers)
+                # wiersze
+                for r in range(table.rowCount()):
+                    row = [table.item(r,c).text() if table.item(r,c) else '' for c in range(table.columnCount())]
+                    writer.writerow(row)
+            self.ctrls['cmd_log'].append(f'Zapisano wyniki skanowania: {path}')
+        except Exception as e:
+            self.ctrls['cmd_log'].append(f'Błąd zapisu wyników skanowania: {e}')

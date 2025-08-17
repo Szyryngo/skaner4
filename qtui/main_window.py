@@ -1,5 +1,5 @@
 import sys
-VERSION = '1.3.0'
+VERSION = '1.3.5 stable'
 import psutil
 from PyQt5.QtWidgets import QApplication, QMainWindow, QTabWidget, QToolBar, QLabel, QWidget, QSizePolicy
 from PyQt5.QtCore import QTimer, Qt

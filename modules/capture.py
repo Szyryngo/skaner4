@@ -74,17 +74,20 @@ Methods
                         ip_layer = pkt['IP']
                         dst_ip = ip_layer.dst
                         src_mac = pkt[Ether].src if pkt.haslayer(Ether) else None
+                        dst_mac = pkt[Ether].dst if pkt.haslayer(Ether) else None
                         protocol = pkt.proto if hasattr(pkt, 'proto') else 'N/A'
                     else:
                         arp = pkt['ARP']
                         ip_layer = arp
                         dst_ip = arp.pdst
                         src_mac = arp.hwsrc
+                        dst_mac = arp.hwdst if hasattr(arp, 'hwdst') else None
                         protocol = 'ARP'
                     event = {
                         'src_ip': ip_layer.src,
                         'dst_ip': dst_ip,
                         'src_mac': src_mac,
+                        'dst_mac': dst_mac,
                         'protocol': protocol,
                         'payload_size': len(pkt),
                         'raw_bytes': bytes(raw(pkt))

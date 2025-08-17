@@ -162,23 +162,23 @@ class SOCTab(QWidget):
     def _add_alert(self, event):
         tbl = self.ctrls['log_table']
         from PyQt5.QtWidgets import QTableWidgetItem
-        row = tbl.rowCount()
-        tbl.insertRow(row)
+        # Insert new alert at top so newest entries appear first
+        tbl.insertRow(0)
         ts = event.data.get('timestamp', datetime.now().strftime('%H:%M:%S'))
         evname = event.type
         weight = event.data.get('ai_weight', 0)
         sev = 'Low' if weight < 0.5 else 'Medium' if weight < 1.5 else 'High'
-        tbl.setItem(row, 0, QTableWidgetItem(ts))
-        tbl.setItem(row, 1, QTableWidgetItem(evname))
-        tbl.setItem(row, 2, QTableWidgetItem(sev))
-        # Additional details
+        tbl.setItem(0, 0, QTableWidgetItem(ts))
+        tbl.setItem(0, 1, QTableWidgetItem(evname))
+        tbl.setItem(0, 2, QTableWidgetItem(sev))
+        # Additional details: source, destination, confidence
         src = event.data.get('src_ip', '') or event.data.get('ip', '')
         dst = event.data.get('dst_ip', '')
         conf_val = event.data.get('confidence', event.data.get('ai_weight', 0))
         conf = f"{conf_val:.2f}" if isinstance(conf_val, (float, int)) else str(conf_val)
-        tbl.setItem(row, 3, QTableWidgetItem(src))
-        tbl.setItem(row, 4, QTableWidgetItem(dst))
-        tbl.setItem(row, 5, QTableWidgetItem(conf))
+        tbl.setItem(0, 3, QTableWidgetItem(src))
+        tbl.setItem(0, 4, QTableWidgetItem(dst))
+        tbl.setItem(0, 5, QTableWidgetItem(conf))
     def _add_device(self, event):
         # Add a node to the network map
         ip = event.data.get('ip')
@@ -219,22 +219,43 @@ class SOCTab(QWidget):
         self._node_positions[ip] = (cx, cy)
 
     def _export_siem(self):
-        # export log_table to CSV with file dialog
-        tbl = self.ctrls['log_table']
-        path, _ = QFileDialog.getSaveFileName(self, 'Save SIEM Log', '', 'CSV Files (*.csv)')
+        """Eksportuj logi SOC do pliku CSV lub innego formatu."""
+        from PyQt5.QtWidgets import QFileDialog
+        from datetime import datetime
+        default_name = f"soc_logs_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+        path, _ = QFileDialog.getSaveFileName(self, 'Zapisz logi SIEM', default_name, 'CSV (*.csv);;JSON (*.json)')
         if not path:
+            self._log('Eksport SIEM anulowany')
             return
-        import csv, datetime
-        with open(path, 'w', newline='', encoding='utf-8') as f:
-            writer = csv.writer(f)
-            # headers
-            headers = [tbl.horizontalHeaderItem(i).text() for i in range(tbl.columnCount())]
-            writer.writerow(headers)
-            for r in range(tbl.rowCount()):
-                row = [tbl.item(r, c).text() if tbl.item(r, c) else '' for c in range(tbl.columnCount())]
-                writer.writerow(row)
-        self._log(f'Exported SIEM log to {path}')
-
+        # Prosty CSV
+        if path.lower().endswith('.csv'):
+            import csv
+            tbl = self.ctrls['log_table']
+            try:
+                with open(path, 'w', newline='', encoding='utf-8') as f:
+                    writer = csv.writer(f)
+                    # header
+                    headers = [tbl.horizontalHeaderItem(i).text() for i in range(tbl.columnCount())]
+                    writer.writerow(headers)
+                    for r in range(tbl.rowCount()):
+                        row = [tbl.item(r,i).text() for i in range(tbl.columnCount())]
+                        writer.writerow(row)
+                self._log(f'Zapisano logi SIEM: {path}')
+            except Exception as e:
+                self._log(f'Błąd zapisu SIEM CSV: {e}')
+        else:
+            # Placeholder for JSON eksport
+            try:
+                import json
+                tbl = self.ctrls['log_table']
+                data = []
+                for r in range(tbl.rowCount()):
+                    data.append({tbl.horizontalHeaderItem(c).text(): tbl.item(r,c).text() for c in range(tbl.columnCount())})
+                with open(path, 'w', encoding='utf-8') as f:
+                    json.dump(data, f, ensure_ascii=False, indent=2)
+                self._log(f'Zapisano logi SIEM JSON: {path}')
+            except Exception as e:
+                self._log(f'Błąd zapisu SIEM JSON: {e}')
     def _open_settings(self):
         """Switch to Config tab in main window"""
         # assume parent is QTabWidget
