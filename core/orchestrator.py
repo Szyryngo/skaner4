@@ -46,32 +46,39 @@ class Orchestrator:
     def run(self):
         """Główna pętla eventów."""
         self.initialize()
-        while True:
-            for obj in (self.modules + self.plugins):
-                event = obj.generate_event()
-                if event:
-                    self.event_queue.append(event)
-            while self.event_queue:
-                event = self.event_queue.pop(0)
-                for obj in (self.modules + self.plugins):
+        import concurrent.futures
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        # Wykorzystanie puli wątków do równoległego generowania zdarzeń
+        with ThreadPoolExecutor(max_workers=len(self.modules + self.plugins)) as executor:
+            while True:
+                # Generowanie zdarzeń równolegle
+                futures = {executor.submit(obj.generate_event): obj for obj in (self.modules + self.plugins)}
+                for fut in as_completed(futures):
                     try:
-                        result = obj.handle_event(event)
-                        if result:
-                            if isinstance(result, Event):
-                                self.event_queue.append(result)
-                                if (self.gui and result.type ==
-                                    'DEVICE_DETECTED'):
-                                    self.gui.handle_event(result)
-                            elif hasattr(result, '__iter__'):
-                                for e in result:
-                                    if isinstance(e, Event):
-                                        self.event_queue.append(e)
-                                        if (self.gui and e.type ==
-                                            'DEVICE_DETECTED'):
-                                            self.gui.handle_event(e)
+                        event = fut.result()
+                        if event:
+                            self.event_queue.append(event)
                     except Exception as e:
-                        print(
-                            f'Błąd w module/pluginie {obj.__class__.__name__}: {e}'
-                            )
-            import time
-            time.sleep(1)
+                        print(f'Błąd generate_event w module {futures[fut].__class__.__name__}: {e}')
+                # Obsługa kolejki zdarzeń
+                while self.event_queue:
+                    event = self.event_queue.pop(0)
+                    for obj in (self.modules + self.plugins):
+                        try:
+                            result = obj.handle_event(event)
+                            if result:
+                                if isinstance(result, Event):
+                                    self.event_queue.append(result)
+                                    if self.gui and result.type == 'DEVICE_DETECTED':
+                                        self.gui.handle_event(result)
+                                elif hasattr(result, '__iter__'):
+                                    for e in result:
+                                        if isinstance(e, Event):
+                                            self.event_queue.append(e)
+                                            if self.gui and e.type == 'DEVICE_DETECTED':
+                                                self.gui.handle_event(e)
+                        except Exception as e:
+                            print(f'Błąd w module/pluginie {obj.__class__.__name__}: {e}')
+                # Krótkie opóźnienie między iteracjami
+                import time
+                time.sleep(1)

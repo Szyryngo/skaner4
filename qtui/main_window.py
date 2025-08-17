@@ -1,9 +1,9 @@
 import sys
-VERSION = '1.1.0'
+VERSION = '1.2.0'
 import psutil
 from PyQt5.QtWidgets import QApplication, QMainWindow, QTabWidget, QToolBar, QLabel, QWidget, QSizePolicy
 from PyQt5.QtCore import QTimer, Qt
-from .dashboard_tab import DashboardTab
+from .qt_dashboard import DashboardTab
 from .devices_tab import DevicesTab
 from .scanner_tab import ScannerTab
 from .nn_tab import NNTab

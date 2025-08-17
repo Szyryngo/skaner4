@@ -12,6 +12,22 @@
 - [x] Uzupełniono dokumentację qtui/qt_dashboard.py (patrz qt_dashboard.py.docstring.txt)
 
 ## Najbliższe zadania
+- [ ] Priorytet: praca nad optymalizacją i wydajnością programu
+- [ ] Profilowanie CPU i I/O (cProfile, py-spy)
+- [ ] Przechwytywanie pakietów w QThread/QThreadPool zamiast wątku głównym
+- [ ] Równoległe skanowanie sieci za pomocą QRunnable/QThreadPool z ograniczonymi wątkami
+- [ ] Przeniesienie analizy AI (Features→Detection) do procesów (multiprocessing) lub rozszerzeń C++/GPU
+- [ ] Batch-owe aktualizacje GUI (QStandardItemModel zamiast QTableWidget)
+- [x] Priorytet: praca nad optymalizacją i wydajnością programu
+- [x] Profilowanie CPU i I/O (cProfile, py-spy)
+- [x] Przechwytywanie pakietów w QThread/QThreadPool zamiast wątku głównym
+- [x] Równoległe skanowanie sieci za pomocą QRunnable/QThreadPool z ograniczonymi wątkami
+- [x] Przeniesienie AI-pipeline do ThreadPoolExecutor
+- [x] Batch-owe aktualizacje GUI QTableWidget (wyłączanie aktualizacji podczas wstawiania)
+- [ ] Dodanie testów jednostkowych/integracyjnych dla wielowątkowości i synchroniczności
+- [ ] Monitoring metryk CPU/RAM dla poszczególnych modułów w UI
+- [ ] Konfiguracja CI z benchmarkami wydajności
+- [ ] Dalsze optymalizacje: cache ARP, ponowne użycie socketów, minimalizacja syscalli
 - [x] Dodano zakładkę `InfoTab` z informacjami o podzespołach komputera (CPU, RAM, GPU, BIOS, płyta główna, dyski, karty sieciowe)
 - [x] Dodano pasek narzędzi z metrykami systemu (CPU%, RAM%, liczba wątków i rdzeni) odświeżany co sekundę
 - [x] Ustalono wersję aplikacji na **1.1.0** i dodano `VERSIONING.md` z polityką wersjonowania

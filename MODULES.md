@@ -45,9 +45,14 @@ Opis wszystkich modułów, ich interfejsów i przeznaczenia.
   - Analiza zasobów komputera (CPU, RAM, OS).
   - Dobór trybu low/high performance.
   - Tworzy event `CONFIG_UPDATED`.
--- **qtui/qt_dashboard.py** –
+- **qtui/qt_dashboard.py** –
   - Natywny GUI PyQt5 (dashboard, zakładki: alerty, urządzenia, skaner, konfiguracja).
   - Dodano metody `_on_export_csv` i `_on_export_pcap` do eksportu pakietów (CSV, PCAP) z domyślnymi nazwami plików zawierającymi timestamp (YYYYMMDD_HHMMSS).
+  - AI-pipeline (FeaturesModule → DetectionModule) przeniesiono do `ThreadPoolExecutor`, offload obliczeń wag AI poza główny wątek.
+  - Batch-owe wstawianie pakietów do QTableWidget (wyłączanie aktualizacji, duże przepustowości bez przeładowań GUI).
+  - Limitowanie liczby wierszy (display max 100) i usuwanie najstarszych w tle.
+  - Asynchroniczne zapisywanie do SQLite przy użyciu `ThreadPoolExecutor` (dedykowany wątek DB).
+  - Przygotowano infrastrukturę do offloadingu ciężkich zadań (np. geolokalizacja) do `ProcessPoolExecutor`.
 
 ---
 

@@ -15,6 +15,7 @@ from qtui.nn_layout import NNLayout
 from modules.scanner import ScannerModule
 from core.events import Event
 import sqlite3
+from concurrent.futures import ThreadPoolExecutor
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QTextCursor
 try:
@@ -74,7 +75,10 @@ Methods
     def __init__(self):
         super().__init__()
         from PyQt5 import uic
-        uic.loadUi('qtui/dashboard.ui', self)
+        # Load UI from file relative to this script
+        import os
+        ui_path = os.path.join(os.path.dirname(__file__), 'dashboard.ui')
+        uic.loadUi(ui_path, self)
         from PyQt5.QtWidgets import QComboBox, QPushButton, QTableWidget, QTextEdit
         self.interface_combo = self.findChild(QComboBox, 'interface_combo')
         self.filter_combo = self.findChild(QComboBox, 'filter_combo')
@@ -135,28 +139,38 @@ Methods
         self.detail_info.setPlaceholderText(
             'Wybierz pakiet, aby zobaczyć szczegóły...')
         self.status_log.setStyleSheet(
-            'background: #222; color: #fff; font-family: Consolas, monospace; font-size: 12px; border-radius: 6px; padding: 4px;'
-            )
+            'background: #222; color: #fff; font-family: Consolas, monospace; '
+            'font-size: 12px; border-radius: 6px; padding: 4px;'
+        )
+        # Inicjalizacja modułu przechwytywania pakietów
         from modules.capture import CaptureModule
         self._capture = CaptureModule()
         self._capture.initialize({})
+        # Inicjalizacja danych pakietów
         self._packet_data = []
+        self._packet_metas = []  # metadane do eksportu i podglądu
         self._db_path = 'packets.db'
         self._init_db()
+        # Flagi stanu
         self._sniffing = False
         self._paused = False
         self._orchestrator = None
         self._packet_counter = 0
+        # Executor for AI pipeline offloading
+        self._executor = ThreadPoolExecutor(max_workers=2)
+        self._futures = []  # pending processing futures
+        # Timer do przetwarzania zdarzeń pakietowych
         from PyQt5.QtCore import QTimer
         self._event_timer = QTimer(self)
         self._event_timer.timeout.connect(self._process_new_packets)
         self._event_timer.start(100)
-        import yaml
-        cfg_path = 'config/config.yaml'
+        # Wczytanie ustawień aplikacji
+        import yaml, os
+        cfg_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'config', 'config.yaml'))
         try:
             with open(cfg_path, 'r', encoding='utf-8') as f:
                 cfg = yaml.safe_load(f) or {}
-        except Exception:
+        except:
             cfg = {}
         bpf = cfg.get('filter', '')
         if bpf:
@@ -164,36 +178,37 @@ Methods
         self._capture.config['filter'] = bpf
         iface = cfg.get('network_interface', None)
         if iface:
-            idx = [i for i, (ifn, _) in enumerate(self._iface_map) if ifn ==
-                iface]
+            idx = [i for i, (ifn, _) in enumerate(self._iface_map) if ifn == iface]
             if idx:
                 self.interface_combo.setCurrentIndex(idx[0])
-        config_mgr = ConfigManager('config/protocols.yaml')
-        self.protocols = config_mgr.load()
-        self._features_module = FeaturesModule()
-        self._features_module.initialize({})
-        self._detection_module = DetectionModule()
-        self._detection_module.initialize({})
-        # Automatyczne rozpoczęcie przechwytywania pakietów przy starcie aplikacji
+        # Wczytanie mapy protokołów
+        proto_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'config', 'protocols.yaml'))
+        self.protocols = ConfigManager(proto_path).load()
+        # Inicjalizacja modułów AI
+        self._features_module = FeaturesModule(); self._features_module.initialize({})
+        self._detection_module = DetectionModule(); self._detection_module.initialize({})
+        # Automatyczne rozpoczęcie przechwytywania
         self._on_start_sniffing()
 
+        # Limit number of displayed rows to avoid excessive repaint
+        self._max_display_rows = 100
+        # Executor for DB writes
+        from concurrent.futures import ThreadPoolExecutor
+        self._db_executor = ThreadPoolExecutor(max_workers=1)
+
     def _on_test_interfaces(self):
-        if not hasattr(self, '_capture') or self._capture is None:
-            self.log_status('Brak CaptureModule!')
-            return
-        try:
-            results = self._capture.test_all_interfaces()
-            found = None
-            for iface, res in results.items():
-                if isinstance(res, int) and res > 0:
-                    found = iface
-                    break
-            if found:
-                self.log_status(f'Przechwytywanie pakietów: <b>{found}</b>')
-            else:
-                self.log_status('Żaden interfejs nie przechwytuje pakietów.')
-        except Exception as e:
-            self.log_status(f'Błąd testu interfejsów: {e}')
+        """Testuj przechwytywanie na wszystkich interfejsach i wyświetl wyniki."""
+        from scapy.all import sniff
+        self.log_status('Rozpoczynam test interfejsów...')
+        for iface, pretty in getattr(self, '_iface_map', []):
+            packets = []
+            try:
+                sniff(prn=lambda pkt: packets.append(pkt), iface=iface,
+                      timeout=2, count=1, store=0)
+                count = len(packets)
+            except Exception as e:
+                count = f'Błąd: {e}'
+            self.log_status(f'{pretty}: {count} pakietów')
 
     def _on_interface_changed(self, idx):
         iface = self.interface_combo.itemData(idx)
@@ -259,25 +274,77 @@ Methods
 
     def _on_export_csv(self):
         """Eksportuj pakiety do pliku CSV"""
-        # TODO: implementacja eksportu do CSV
-        self.log_status('Eksport pakietów do CSV niezaimplementowany')
+        from PyQt5.QtWidgets import QFileDialog
+        try:
+            path, _ = QFileDialog.getSaveFileName(self, 'Zapisz CSV', '', 'CSV (*.csv)')
+            if not path:
+                self.log_status('Eksport CSV anulowany')
+                return
+            import csv
+            # Zapisz dane pakietów z metadanych
+            with open(path, 'w', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+                writer.writerow(['ID', 'Time', 'Src', 'Dst', 'Proto', 'Size', 'AI'])
+                for i, m in enumerate(self._packet_metas, start=1):
+                    writer.writerow([
+                        i,
+                        m.get('timestamp', ''),
+                        m.get('src_ip', ''),
+                        m.get('dst_ip', ''),
+                        m.get('protocol', ''),
+                        m.get('payload_size', ''),
+                        m.get('ai_weight', '')
+                    ])
+            self.log_status(f'Zapisano CSV: {path}')
+        except Exception as e:
+            self.log_status(f'Błąd zapisu CSV: {e}')
 
     def _on_export_pcap(self):
         """Eksportuj pakiety do pliku PCAP"""
-        # TODO: implementacja eksportu do PCAP
-        self.log_status('Eksport pakietów do PCAP niezaimplementowany')
+        from PyQt5.QtWidgets import QFileDialog
+        from scapy.all import wrpcap, Ether
+        try:
+            path, _ = QFileDialog.getSaveFileName(self, 'Zapisz PCAP', '', 'PCAP (*.pcap)')
+            if not path:
+                self.log_status('Eksport PCAP anulowany')
+                return
+            # Utwórz listę pakietów Scapy z surowych bajtów
+            pkts = [Ether(m.get('raw_bytes', b'')) for m in self._packet_metas]
+            wrpcap(path, pkts)
+            self.log_status(f'Zapisano PCAP: {path}')
+        except Exception as e:
+            self.log_status(f'Błąd zapisu PCAP: {e}')
     
     def _show_packet_details_inline(self, row, col):
         """Wyświetla szczegóły pakietu po kliknięciu w tabeli"""
         try:
-            pkt_id_item = self.packets.item(row, 0)
-            if not pkt_id_item:
-                return
-            pkt_id = pkt_id_item.text()
-            # TODO: Pobierz dane pakietu po pkt_id i wyświetl szczegóły
-            self.detail_info.setText(f"Szczegóły pakietu ID {pkt_id}")
-            self.hex_view.setText("HEX view not implemented")
-            self.ascii_view.setText("ASCII view not implemented")
+            # Pobierz metadane pakietu
+            meta = self._packet_metas[row]
+            raw = meta.get('raw_bytes', b'')
+            weight = meta.get('ai_weight', '')
+            # Parsowanie warstw pakietu
+            from scapy.packet import NoPayload
+            pkt = Ether(raw)
+            lines = [f"AI weight: {weight}\n"]
+            layer = pkt
+            while layer and not isinstance(layer, NoPayload):
+                lines.append(f"== Layer: {layer.name} ==\n")
+                for field, value in layer.fields.items():
+                    # Tłumaczenie numerów protokołów, jeśli mapa dostępna
+                    if field in ('proto', 'type') and isinstance(value, int):
+                        pname = None
+                        if isinstance(self.protocols, dict):
+                            pname = self.protocols.get(value)
+                        if pname:
+                            value = f"{pname} ({value})"
+                    lines.append(f"{field}: {value}\n")
+                layer = layer.payload if hasattr(layer, 'payload') else None
+            # Wyświetl szczegóły
+            self.detail_info.setPlainText(''.join(lines))
+            # Wyświetl HEX
+            self.hex_view.setPlainText(' '.join(f"{b:02x}" for b in raw))
+            # Wyświetl ASCII
+            self.ascii_view.setPlainText(''.join(chr(b) if 32 <= b < 127 else '.' for b in raw))
         except Exception as e:
             self.log_status(f"Nie można wyświetlić szczegółów pakietu: {e}")
 
@@ -379,40 +446,139 @@ Methods
             pass
 
     def _process_new_packets(self):
+        # Skip if not active
         if not self._sniffing or self._paused:
             return
+        # Fetch and submit new events to executor
         if self._capture and hasattr(self._capture, 'generate_event'):
-            event = self._capture.generate_event()
-            if not event:
-                return
-            pkt_bytes = event.data.get('raw_bytes')
-            meta = event.data
-            # Dodaj nowy wiersz z przechwyconym pakietem
-            from datetime import datetime
-            row = self.packets.rowCount()
-            self.packets.insertRow(row)
-            # Ustaw kolumny: ID, Czas, Źródło, Cel, Protokół, Rozmiar, Waga AI, Geo
-            self.packets.setItem(row, 0, QTableWidgetItem(str(self._packet_counter)))
-            now = datetime.now().strftime('%H:%M:%S')
-            self.packets.setItem(row, 1, QTableWidgetItem(now))
-            self.packets.setItem(row, 2, QTableWidgetItem(str(meta.get('src_ip', ''))))
-            self.packets.setItem(row, 3, QTableWidgetItem(str(meta.get('dst_ip', ''))))
-            self.packets.setItem(row, 4, QTableWidgetItem(str(meta.get('protocol', ''))))
-            self.packets.setItem(row, 5, QTableWidgetItem(str(meta.get('payload_size', ''))))
-            self.packets.setItem(row, 6, QTableWidgetItem(''))
-            self.packets.setItem(row, 7, QTableWidgetItem(''))
-            self._packet_counter += 1
-            # Wywołanie handlerów aktualizacji pakietów dla wszystkich protokołów
-            protocols = [
-                'ipsec', 'ssl', 'tls', 'http', 'dns', 'dhcp', 'ntp', 'smtp',
-                'pop3', 'imap', 'ftp', 'tftp', 'snmp', 'ldap', 'radius',
-                'tacacs', 'sctp', 'igmp', 'arp', 'rarp', 'ipv4', 'ipv6',
-                'icmp', 'ah', 'eap', 'pptp', 'l2tp'
-            ]
-            for proto in protocols:
-                handler = getattr(self, f'_update_packet_{proto}', None)
-                if callable(handler):
-                    handler(pkt_bytes, meta)
+            while True:
+                event = self._capture.generate_event()
+                if not event:
+                    break
+                # Submit processing to background
+                fut = self._executor.submit(self._process_packet, event)
+                self._futures.append(fut)
+        # Collect completed futures and update UI in batch
+        if not self._futures:
+            return
+        # Disable updates for batch insert
+        self.packets.setUpdatesEnabled(False)
+        done, pending = [], []
+        for fut in self._futures:
+            if fut.done():
+                try:
+                    meta = fut.result()
+                    self._insert_packet_row(meta)
+                except Exception as e:
+                    self.log_status(f'Błąd przetwarzania pakietu: {e}')
+                else:
+                    done.append(fut)
+            else:
+                pending.append(fut)
+        self._futures = pending
+        self.packets.setUpdatesEnabled(True)
+
+    def _process_packet(self, event):
+        """Oblicza AI weight i przygotowuje metadane pakietu."""
+        meta = event.data.copy()
+        # Timestamp
+        from datetime import datetime
+        meta['timestamp'] = datetime.now().strftime('%H:%M:%S')
+        # AI pipeline
+        self._features_module.handle_event(event)
+        try:
+            feat_ev = self._features_module.generate_event()
+        except AttributeError:
+            # Missing last_packet, treat as no features
+            feat_ev = None
+        weight = 0.0
+        if feat_ev:
+            feats = feat_ev.data
+            import numpy as _np
+            X = _np.array([
+                float(feats.get('packet_count', 0)),
+                float(feats.get('total_bytes', 0)),
+                float(feats.get('flow_id', 0))
+            ])
+            # Ensure 2D array for model
+            if X.ndim == 1:
+                X = X.reshape(1, -1)
+            if getattr(self._detection_module, 'use_nn', False) and hasattr(self._detection_module, 'nn_model'):
+                weight = float(self._detection_module.nn_model.predict(X)[0][0])
+            elif hasattr(self._detection_module, 'if_model'):
+                score = float(self._detection_module.if_model.decision_function(X)[0])
+                weight = abs(score)
+        meta['ai_weight'] = round(weight, 2)
+        return meta
+
+    def _insert_packet_row(self, meta):
+        """Wstawia przetworzony pakiet do GUI."""
+        # Insert row at top
+        self._packet_counter += 1
+        self.packets.insertRow(0)
+        # Map protocol
+        raw_proto = meta.get('protocol', '')
+        try:
+            num = int(raw_proto)
+            display_proto = self.protocols.get(num, raw_proto)
+        except:
+            display_proto = raw_proto
+        vals = [
+            str(self._packet_counter),
+            meta.get('timestamp', ''),
+            str(meta.get('src_ip', '')),
+            str(meta.get('dst_ip', '')),
+            str(display_proto),
+            str(meta.get('payload_size', '')),
+            str(meta.get('ai_weight', '')),
+            str(meta.get('geolocation', ''))
+        ]
+        for col, v in enumerate(vals):
+            self.packets.setItem(0, col, QTableWidgetItem(v))
+        # Color by weight
+        try:
+            from PyQt5.QtGui import QColor
+            w = float(vals[6])
+            if w < 0.5:
+                color = QColor(0, 200, 0, 60)
+            elif w < 1.5:
+                color = QColor(255, 255, 0, 60)
+            else:
+                color = QColor(255, 0, 0, 80)
+            for c in range(self.packets.columnCount()):
+                item = self.packets.item(0, c)
+                if item:
+                    item.setBackground(color)
+        except:
+            pass
+        # Store metadata
+        self._packet_metas.insert(0, meta)
+        # Asynchronously save to DB
+        try:
+            pkt_id = self._packet_counter
+            # schedule DB write
+            self._db_executor.submit(
+                self._save_packet_to_db,
+                pkt_id,
+                meta.get('timestamp', ''),
+                meta.get('src_ip', ''),
+                meta.get('dst_ip', ''),
+                meta.get('protocol', ''),
+                meta.get('payload_size', ''),
+                meta.get('ai_weight', ''),
+                meta.get('geolocation', '')
+            )
+        except Exception as e:
+            self.log_status(f'Błąd zapisu do DB: {e}')
+        # Enforce row cap
+        row_count = self.packets.rowCount()
+        if row_count > self._max_display_rows:
+            # remove oldest row
+            self.packets.removeRow(row_count - 1)
+            try:
+                self._packet_metas.pop()
+            except IndexError:
+                pass
                 # end of DashboardTab
 
 class MainWindow(QMainWindow):
