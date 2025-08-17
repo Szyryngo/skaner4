@@ -1,4 +1,6 @@
 # Dokumentacja: qtui/qt_dashboard.py
+# Wersja: 1.3.0
+# Data: 2025-08-17
 
 ## Kluczowe klasy i metody
 
@@ -31,17 +33,20 @@
 - Zakładki do podglądu urządzeń, skanowania sieci i konfiguracji.
 
 ## Ostatnie zmiany
-- Dodano przyciski eksportu pakietów (CSV, PCAP) z domyślnymi nazwami plików zawierającymi timestamp (YYYYMMDD_HHMMSS).
-- Dodano dekodowanie warstw protokołu: Scapy wyświetla struktury warstw, numer protokołu tłumaczony z `config/protocols.yaml`.
+- Wersja 0.2.0 (2025-08-17):
+  - Usunięto lokalny import ThreadPoolExecutor (naprawiono UnboundLocalError).
+  - Dodano eksport pakietów do CSV (_on_export_csv) i PCAP (_on_export_pcap) z nazwami plików zawierającymi timestamp.
+  - Wprowadzono mapowanie numerów protokołów z pliku config/protocols.yaml.
+  - Uporządkowano wątki: dwa dla AI pipeline, jeden dla operacji na bazie SQLite.
+  - Usunięto prototypowe fragmenty profilowania AI.
 
 ## Użytkowanie
 - Przejdź do zakładki Dashboard.
 - Użyj pola kombinowanego filtra lub pola wejściowego, aby wybrać/wprowadzić wyrażenie BPF.
 - Kliknij "Ustaw filtr", aby zastosować filtr i zaktualizować przechwytywanie.
 
-## Dodatkowe informacje
-- Filtr BPF jest teraz stosowany w czasie rzeczywistym, ponownie uruchamiając AsyncSniffer z określonym filtrem.
-
-## W planie
-- Eventy AI: zoptymalizować przepływ (pakiet → `FeaturesModule` → `DetectionModule` → `ai_weight`).
-- Eksport pakietów: zaimplementować przycisk eksportu do CSV i PCAP na pasku narzędzi lub menu.
+## TODO / Kolejne kroki
+- Zaimplementować brakujące metody w gui skanera (`_on_preview_ports`, `_on_save`, `_on_export`).
+- Uzupełnić `handle_event()` w modułach: CaptureModule, DevicesSnifferModule, OptimizerModule.
+- Dodać paginację lub lazy loading w tabeli pakietów.
+- Rozbudować wizualizacje przepustowości i alertów AI na DashboardTab.

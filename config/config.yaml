@@ -1,5 +1,5 @@
 ai_model_path: data/models/
-filter: tcp
+filter: ''
 gui: qt
 network_interface: \Device\NPF_{2F6D1A14-CA27-4B70-A549-1146FE5BD904}
 ui_port: 5000

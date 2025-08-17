@@ -192,8 +192,7 @@ Methods
 
         # Limit number of displayed rows to avoid excessive repaint
         self._max_display_rows = 100
-        # Executor for DB writes
-        from concurrent.futures import ThreadPoolExecutor
+    # Executor for DB writes (używa module-level importu ThreadPoolExecutor)
         self._db_executor = ThreadPoolExecutor(max_workers=1)
 
     def _on_test_interfaces(self):
