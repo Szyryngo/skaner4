@@ -78,6 +78,21 @@ skaner4/
 └── main.py             # punkt startowy
 ```
 
+## 🔄 Przepływ danych end-to-end
+- CaptureModule (Scapy) wychwytuje pakiet → wysyła event `NEW_PACKET`.
+- `SnortRulesPlugin` (plugin) w Orchestratorze przy każdym `NEW_PACKET` porównuje go z regułami i – jeśli pasuje – generuje `SNORT_ALERT`.
+- Orchestrator przechwytuje `SNORT_ALERT` i dorzuca do kolejki eventów.
+- `DetectionModule` w Orchestratorze odbiera `SNORT_ALERT`, dodaje SID do wewnętrznego zbioru `_snort_sids`.
+- `FeaturesModule` (równolegle) dla każdego `NEW_PACKET` tworzy event `NEW_FEATURES` z podstawowymi cechami pakietu.
+- `DetectionModule` po otrzymaniu `NEW_FEATURES` buduje wektor cech:
+	- [packet_count, total_bytes, flow_id]
+	- plus flagi 0/1 dla każdego SID z `_snort_sids`
+	- czyści `_snort_sids`
+- `DetectionModule` na podstawie tego wektora (IsolationForest lub NN) oblicza score/`ai_weight` i generuje `NEW_THREAT`.
+- GUI (`qt_dashboard.py`) subskrybuje `DetectionModule` i przy wstawianiu wiersza do tabeli bierze `ai_weight` z metadanych.
+
+Dzięki temu każdy pakiet, który wyzwolił przynajmniej jedną regułę Snort, ma wektor cech z odpowiednimi jedynkami, a model AI nadaje mu wyższą wartość `ai_weight`. W GUI zobaczysz tę wagę w kolumnie **Waga AI** i odpowiednie kolorowanie wiersza.
+
 ---
 
 ## 📄 README.md
