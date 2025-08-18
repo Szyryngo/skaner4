@@ -26,6 +26,23 @@ class SOCWorker(QObject):
             if ev:
                 # emit raw for device detection and map drawing
                 self.raw_event.emit(ev)
+                # SNORT integration: feed any matched alert into detection flags
+                try:
+                    alert = self.detection.snort_plugin.handle_event(ev)
+                    if alert:
+                        # feed SNORT alert into detection flags only
+                        self.detection.handle_event(alert)
+                        # emit SNORT alert as threat event for GUI coloring
+                        snort_threat = Event('NEW_THREAT', {
+                            'src_ip': alert.data.get('src_ip'),
+                            'dst_ip': alert.data.get('dst_ip'),
+                            'ip': alert.data.get('src_ip'),
+                            'ai_weight': 2.0,
+                            'details': alert.data
+                        })
+                        self.threat.emit(snort_threat)
+                except Exception:
+                    pass
                 # AI processing
                 self.features.handle_event(ev)
                 fe = self.features.generate_event()
@@ -36,6 +53,8 @@ class SOCWorker(QObject):
                         # enrich threat event
                         th.data['src_ip'] = ev.data.get('src_ip')
                         th.data['dst_ip'] = ev.data.get('dst_ip')
+                        # also set generic 'ip' for UI lookup
+                        th.data['ip'] = ev.data.get('src_ip')
                         self.threat.emit(th)
             QThread.msleep(100)
 
@@ -58,9 +77,10 @@ class SOCTab(QWidget):
         self.ctrls['map_view'].setScene(self.scene)
         self._nodes = {}        # ip -> (ellipse, text)
         self._node_positions = {}  # ip -> (x_center, y_center)
+        self._node_logs = {}  # per-node logs of (timestamp, event, details)
         # Devices module for map
         from modules.devices import DevicesModule as _DevMod
-        self._devices = DevicesModule(); self._devices.initialize({})
+        self._devices = _DevMod(); self._devices.initialize({})
         # Identify local IP addresses for highlighting
         import psutil, socket
         self._local_ips = set()
@@ -101,8 +121,19 @@ class SOCTab(QWidget):
         self.ctrls['email_btn'].clicked.connect(lambda: self._log('Email notification sent'))
         self.ctrls['report_btn'].clicked.connect(lambda: self._log('PDF report generated'))
         self._log('SOC tab initialized')
+        # Start live monitoring by default so logs/alerts appear
+        try:
+            self.ctrls['live_btn'].setChecked(True)
+            self._toggle_live()
+        except Exception:
+            pass
         # Install click filter on map for node info
         self.ctrls['map_view'].viewport().installEventFilter(self)
+        # Also install filter on view for debugging
+        self.ctrls['map_view'].installEventFilter(self)
+        # Enable mouse tracking to capture events
+        self.ctrls['map_view'].viewport().setMouseTracking(True)
+        self.ctrls['map_view'].setMouseTracking(True)
         # Load Threat Intelligence blacklist
         import os, ipaddress
         self._blacklist = []
@@ -179,26 +210,49 @@ class SOCTab(QWidget):
         except Exception:
             pass
     def eventFilter(self, source, event):
-        from PyQt5.QtCore import QEvent
+        """
+        Handle clicks on the map view: right-click simulates a threat, left-click shows device info with history.
+        """
+        from PyQt5.QtCore import QEvent, Qt
         from PyQt5.QtWidgets import QMessageBox
-        # Left click on map viewport
-        if source is self.ctrls['map_view'].viewport() and event.type() == QEvent.MouseButtonPress and event.button() == Qt.LeftButton:
+        # Only handle mouse press events on the map viewport
+        if source is self.ctrls['map_view'].viewport() and event.type() == QEvent.MouseButtonPress:
+            # Debug log
+            try:
+                pos = event.pos()
+                self._log(f"eventFilter: MouseButtonPress at view coords {pos}")
+            except Exception:
+                pass
+            # Map to scene coordinates
             scene_pos = self.ctrls['map_view'].mapToScene(event.pos())
             items = self.scene.items(scene_pos)
             for it in items:
                 for ip, (ellipse, text) in self._nodes.items():
                     if it is ellipse or it is text:
-                        # fetch device info
-                        dev = self._devices.devices.get(ip, {})
-                        from datetime import datetime
-                        first = dev.get('first_seen')
-                        first_str = datetime.fromtimestamp(first).strftime('%H:%M:%S') if first else 'N/A'
-                        info = (f"IP: {ip}\n"
-                                f"MAC: {dev.get('mac','')}\n"
-                                f"First seen: {first_str}\n"
-                                f"Packets: {dev.get('count','')}\n")
-                        QMessageBox.information(self, f"Device info: {ip}", info)
-                        return True
+                        # Right-click handling disabled
+                        # if event.button() == Qt.RightButton:
+                        #     pass
+                        # Left-click: show device info and history
+                        if event.button() == Qt.LeftButton:
+                            dev = self._devices.devices.get(ip, {})
+                            from datetime import datetime
+                            first = dev.get('first_seen')
+                            first_str = datetime.fromtimestamp(first).strftime('%H:%M:%S') if first else 'N/A'
+                            info = (f"IP: {ip}\n"
+                                    f"MAC: {dev.get('mac','')}\n"
+                                    f"First seen: {first_str}\n"
+                                    f"Packets: {dev.get('count','')}\n")
+                            # Append history logs
+                            logs = self._node_logs.get(ip, [])
+                            if logs:
+                                info += "\nTraffic history:\n"
+                                for ts, evt, details in logs:
+                                    info += f"[{ts}] {evt} {details}\n"
+                            QMessageBox.information(self, f"Device info: {ip}", info)
+                            return True
+            # If click was on map but not on a node, consume event
+            return True
+        # Default handling
         return super().eventFilter(source, event)
 
     def _toggle_scheduled(self):
@@ -220,53 +274,49 @@ class SOCTab(QWidget):
 
     @pyqtSlot(object)
     def _on_worker_threat(self, event):
+        # Debug: log invocation and live state
+        self._log(f"_on_worker_threat called: live={self._live}, scheduled={self._scheduled}")
         # Only process if live or scheduled
         if not self._live and not self._scheduled:
             return
         # add alert UI and update node color
         self._add_alert(event)
-        ip = event.data.get('ip')
+        ip = event.data.get('src_ip') or event.data.get('ip')
         weight = event.data.get('ai_weight', 0)
         if ip:
+            # ensure node exists (create if missing)
+            if ip not in self._nodes:
+                # add device node without MAC
+                from core.events import Event
+                self._add_device(Event('DEVICE_DETECTED', {'ip': ip, 'mac': ''}))
+            self._log(f"_on_worker_threat: updating node {ip} with weight {weight}")
             self._update_node_color(ip, weight)
     
     @pyqtSlot(object)
     def _on_raw_event(self, ev):
-        # Process raw packet events for network map
+        # Only process if live or scheduled
         if not self._live and not self._scheduled:
             return
+        # Debug log raw event
         src = ev.data.get('src_ip')
         dst = ev.data.get('dst_ip')
-        # MAC addresses
+        self._log(f"Raw packet event: {src} -> {dst}")
+        # Log raw packet to per-node logs
+        from datetime import datetime
+        ts = datetime.now().strftime('%H:%M:%S')
+        src = ev.data.get('src_ip')
+        dst = ev.data.get('dst_ip')
         src_mac = ev.data.get('src_mac')
         dst_mac = ev.data.get('dst_mac')
-        # Process through Snort rules plugins
-        for plugin in getattr(self, '_snort_plugins', []):
-            alert = plugin.handle_event(ev)
-            if alert and alert.type == 'SNORT_ALERT':
-                self._add_alert(alert)
-        # Device detection for source
+        if src:
+            self._node_logs.setdefault(src, []).append((ts, 'RAW_PACKET', ''))
+        if dst:
+            self._node_logs.setdefault(dst, []).append((ts, 'RAW_PACKET', ''))
+        # Ensure nodes exist for both endpoints
         if src and src not in self._nodes:
             self._add_device(Event('DEVICE_DETECTED', {'ip': src, 'mac': src_mac}))
-            if src_mac:
-                prefix = ':'.join(src_mac.split(':')[:3]).upper()
-                threading.Thread(
-                    target=discover_and_update,
-                    args=(src, src_mac, prefix, ''),
-                    kwargs={'callback': None},
-                    daemon=True
-                ).start()
-        # Device detection for destination
         if dst and dst not in self._nodes:
             self._add_device(Event('DEVICE_DETECTED', {'ip': dst, 'mac': dst_mac}))
-            if dst_mac:
-                prefix = ':'.join(dst_mac.split(':')[:3]).upper()
-                threading.Thread(
-                    target=discover_and_update,
-                    args=(dst, dst_mac, prefix, ''),
-                    kwargs={'callback': None},
-                    daemon=True
-                ).start()
         # Draw line between nodes
         if src in self._node_positions and dst in self._node_positions:
             x1, y1 = self._node_positions[src]
@@ -274,7 +324,7 @@ class SOCTab(QWidget):
             line = QGraphicsLineItem(QLineF(x1, y1, x2, y2))
             line.setPen(QPen(Qt.blue))
             self.scene.addItem(line)
-            # remove line after 2s
+            # remove after 2s
             QTimer.singleShot(2000, lambda l=line: self.scene.removeItem(l))
 
     def _add_alert(self, event):
@@ -439,15 +489,18 @@ class SOCTab(QWidget):
         if ip not in self._nodes:
             return
         ellipse, _ = self._nodes[ip]
-        from PyQt5.QtGui import QBrush
-        # determine severity
+        from PyQt5.QtGui import QBrush, QColor
+        # determine severity and assign explicit QColor
         if weight < 0.5:
-            color = Qt.green
+            qcolor = QColor('green')
         elif weight < 1.5:
-            color = Qt.yellow
+            qcolor = QColor('yellow')
         else:
-            color = Qt.red
-        ellipse.setBrush(QBrush(color))
+            qcolor = QColor('red')
+        brush = QBrush(qcolor)
+        ellipse.setBrush(brush)
+        # Debug log
+        self._log(f"Node {ip} color updated to weight {weight}, color {qcolor.name()}")
     
     def _send_email_notification(self, event):
         """Send email notification for SOC event if threshold exceeded."""

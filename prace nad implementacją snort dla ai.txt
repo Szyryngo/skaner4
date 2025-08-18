@@ -1,0 +1,38 @@
+Poniżej porównanie najważniejszych elementów składni Snort vs. to, co mamy dziś zaimplementowane w naszym pluginie:
+
+Obsługiwane teraz
+
+Header: proto, src_addr (w tym CIDR), src_port, dst_addr (CIDR), dst_port
+Opcje „statyczne”:
+• content
+• pcre (kompilowane do regex)
+• itype (ICMP type)
+• flags (podstawowe bitmapy TCP)
+Opcje „dynamiczne”:
+• threshold (count/seconds, track by_src/by_dst)
+Wielkość danych:
+• dsize (payload)
+• length (cały pakiet raw)
+Byte-test (size, op, value, offset)
+Braki względem pełnej składni Snort
+
+flow / flow:established / flowbits (śledzenie stanu TCP/ip)
+http_* (http_method, http_uri, http_client_body, itp.)
+dns.* (dns_query, dns_query_type, dns_rcode itd.)
+offset & depth (przesunięcie/wielkość wyszukiwania w payload)
+within & distance (reguły względnych pozycji w payload)
+uricontent / nocase / rawbytes
+byte_jump / byte_extract / isdataat
+fragbits / fragoffset / ttl / tos / ip_flags
+rate_filter (ograniczanie alertów na jednostkę czasu)
+metadata / classtype / priority / reference (czysto informacyjne)
+rev (wersja reguły), msg (opis), sid/ gid (identyfikatory) – te mamy, ale nie wszystkie pola pomocnicze
+zaawansowane typy threshold (per_src, per_dst, per_src_and_dst)
+Kolejne kroki
+
+Rozbudować handle_event o obsługę flow/flowbits (stanowe trackery), offset/depth, within/distance
+Dodać parsowanie http_* i dns.* – analiza payloadu na poziomie warstwy 7
+Uzupełnić byte_extract/jump oraz opcje fragmentacji IP (fragoffset/fragbits)
+Dodać rate_filter i dodatkowe operatory wartości liczbowych
+Rozważyć wykorzystanie gotowego parsera rule-file (np. własna implementacja lub inna biblioteka)
+Daj znać, od czego chcesz zacząć, a doprecyzuję implementację.

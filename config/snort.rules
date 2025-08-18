@@ -1,5 +1,33 @@
-# Sample Snort rules
-# Each rule should be in Snort rules syntax, e.g.:
-# alert tcp any any -> any any (msg:"Test rule"; content:"GET"; sid:1000001; rev:1;)
-
-# Add your Snort rules below
+# ----------------------------------------
+# Reguły Snort
+# ----------------------------------------
+alert icmp any any -> any any (msg:"Wykryto żądanie echo ICMP"; itype:8; sid:1000001; rev:1;)
+alert tcp any any -> any 80 (msg:"Żądanie HTTP GET"; flow:to_server,established; content:"GET"; http_method; sid:1000002; rev:1;)
+alert udp any any -> any 53 (msg:"Zaobserwowano zapytanie DNS"; dport:53; sid:1000003; rev:1;)
+alert tcp any any -> any any (msg:"Prawdopodobny atak TCP SYN flood"; flags:S; threshold:type threshold, track by_src, count 70, seconds 10; sid:1000004; rev:1;)
+alert tcp any any -> any 23 (msg:"Próba logowania Telnet"; flow:to_server,established; content:"login"; sid:1000005; rev:1;)
+alert tcp any any -> any 22 (msg:"Próba logowania SSH"; flow:to_server,established; content:"SSH-"; sid:1000006; rev:1;)
+alert tcp any any -> any any (msg:"Skan SYN"; flags:S; threshold:type both, track by_src, count 5, seconds 10; sid:1000007; rev:1;)
+alert tcp any any -> any 21 (msg:"Logowanie FTP (USER/PASS)"; flow:to_server,established; content:"USER "; sid:1000008; rev:1;)
+alert tcp any any -> any 21 (msg:"Pobieranie FTP (RETR)"; flow:to_server,established; content:"RETR "; sid:1000009; rev:1;)
+alert http any any -> any any (msg:"Wstrzyknięcie SQL"; flow:to_server,established; content:"union select"; nocase; http_client_body; sid:1000010; rev:1;)
+alert http any any -> any any (msg:"Atak XSS (Cross-Site Scripting)"; flow:to_server,established; content:"<script>"; nocase; sid:1000011; rev:1;)
+alert udp any any -> any 53 (msg:"Podejrzane DNS"; dport:53; dsize:>200; sid:1000012; rev:1;)
+alert tcp any any -> any 445 (msg:"Dostęp SMB"; flow:to_server,established; content:"|FF|SMB"; sid:1000013; rev:1;)
+alert icmp any any -> any any (msg:"ICMP żądanie znacznika czasu"; itype:13; sid:1000014; rev:1;)
+alert icmp any any -> any any (msg:"ICMP żądanie maski adresu"; itype:17; sid:1000015; rev:1;)
+alert tcp any any -> any any (msg:"Port scan SYN"; flags:S; threshold:type both, track by_src, count 20, seconds 5; sid:1000020; rev:1;)
+alert tcp any any -> any any (msg:"Możliwy SYN flood"; flags:S; threshold:type threshold, track by_dst, count 100, seconds 1; sid:1000021; rev:1;)
+alert ip any any -> any any (msg:"Podejrzany duży transfer wychodzący"; flow:to_client; dsize:>100000; sid:1000022; rev:1;)
+alert udp any any -> any any (msg:"Podejrzany flood UDP"; threshold:type both, track by_src, count 200, seconds 10; sid:1000023; rev:1;)
+alert http any any -> any any (msg:"Duży HTTP POST"; flow:to_server,established; content:"POST"; http_client_body; dsize:>50000; sid:1000024; rev:1;)
+alert udp any any -> any 53 (msg:"DoS przez otwarty resolver DNS"; dsize:>512; sid:1000036; rev:1;)
+alert udp any any -> any 53 (msg:"Zalew DNS NXDOMAIN"; dns.flags.rcode:3; threshold:type both, track by_src, count 50, seconds 10; sid:1000037; rev:1;)
+alert udp any any -> any 53 (msg:"Możliwa próba zatrucia cache DNS"; dns.flags.rd:1; dns.flags.ad:0; sid:1000038; rev:1;)
+alert udp any any -> any 53 (msg:"Potencjalne tunelowanie DNS"; pcre:"/([A-Za-z0-9_-]{50,}\.)+/"; sid:1000039; rev:1;)
+alert udp any any -> any 53 (msg:"Atak losowymi subdomenami"; dns.qry.name; pcre:"/^[A-Za-z0-9]{8,}\./"; threshold:type both, track by_src, count 30, seconds 10; sid:1000040; rev:1;)
+alert udp any any -> any 53 (msg:"Atak fantomowej domeny"; dns.flags.rcode:3; pcre:"/phantomdomain\\./i"; sid:1000041; rev:1;)
+alert tcp any any -> any 23 (msg:"Skan portu Telnet (SYN)"; flags:S; threshold:type both, track by_src, count 5, seconds 60; sid:1000050; rev:1;)
+alert tcp any any -> any any (msg:"Network scan detected - TCP SYN scan"; flags:S; threshold:type both, track by_src, count 10, seconds 10; sid:1000062; rev:1;)
+# Test ICMP rule for manual triggering
+alert icmp any any -> any any (msg:"ICMP test"; itype:8; sid:2000001; rev:1;)

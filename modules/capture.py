@@ -1,6 +1,7 @@
 from core.interfaces import ModuleBase
 from core.events import Event
 from scapy.all import AsyncSniffer, raw, sniff, Ether, ARP
+from scapy.layers.inet import TCP, UDP, ICMP
 
 
 class CaptureModule(ModuleBase):
@@ -54,12 +55,34 @@ Methods
         def pkt_callback(pkt):
             try:
                 if pkt.haslayer('IP') or pkt.haslayer(ARP):
+                    # przygotuj domyślne transport layer info
+                    src_port = None
+                    dst_port = None
+                    tcp_flags = ''
+                    icmp_type = None
                     if pkt.haslayer('IP'):
                         ip_layer = pkt['IP']
                         dst_ip = ip_layer.dst
                         src_mac = pkt[Ether].src if pkt.haslayer(Ether) else None
                         dst_mac = pkt[Ether].dst if pkt.haslayer(Ether) else None
-                        protocol = pkt.proto if hasattr(pkt, 'proto') else 'N/A'
+                        # detekcja warstwy transport
+                        if pkt.haslayer(TCP):
+                            tcp = pkt[TCP]
+                            src_port = tcp.sport
+                            dst_port = tcp.dport
+                            tcp_flags = str(tcp.flags)
+                            protocol = 'tcp'
+                        elif pkt.haslayer(UDP):
+                            udp = pkt[UDP]
+                            src_port = udp.sport
+                            dst_port = udp.dport
+                            protocol = 'udp'
+                        elif pkt.haslayer(ICMP):
+                            icmp = pkt[ICMP]
+                            icmp_type = icmp.type
+                            protocol = 'icmp'
+                        else:
+                            protocol = pkt.proto if hasattr(pkt, 'proto') else 'N/A'
                     else:
                         arp = pkt['ARP']
                         ip_layer = arp
@@ -67,16 +90,22 @@ Methods
                         src_mac = arp.hwsrc
                         dst_mac = arp.hwdst if hasattr(arp, 'hwdst') else None
                         protocol = 'ARP'
-
+                    # zbuduj event z pełnymi danymi
                     event = {
                         'src_ip': ip_layer.src,
                         'dst_ip': dst_ip,
                         'src_mac': src_mac,
                         'dst_mac': dst_mac,
                         'protocol': protocol,
+                        'src_port': src_port,
+                        'dst_port': dst_port,
+                        'tcp_flags': tcp_flags,
+                        'icmp_type': icmp_type,
                         'payload_size': len(pkt),
                         'raw_bytes': bytes(raw(pkt))
                     }
+                    # debug: show captured event protocol and ICMP type
+                    print(f"[DEBUG CAPTURE] built event: protocol={protocol}, icmp_type={icmp_type}, src={ip_layer.src}, dst={dst_ip}")
                     self._last_packet = event
             except Exception:
                 pass

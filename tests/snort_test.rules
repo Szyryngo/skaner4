@@ -1,0 +1,2 @@
+alert icmp any any -> any any (msg:"Ping test"; itype:8; sid:1000; rev:1;)
+alert tcp any any -> any any (msg:"SYN flood test"; flags:S; threshold:type threshold, track by_src, count 2, seconds 1; sid:1001; rev:1;)

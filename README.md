@@ -21,14 +21,28 @@ Repozytorium: https://github.com/Szyryngo/skaner4
  	- Rozbudowano panel szczegółów: dekodowanie warstw protokołu (Scapy) oraz tłumaczenie numerów protokołów z config/protocols.yaml.
  - Dodano zakładkę `Info` z informacjami o podzespołach komputera (CPU, RAM, GPU, BIOS, płyta główna, dyski, karty sieciowe).
  - Dodano pasek narzędzi z metrykami systemu (CPU%, RAM%, liczba wątków i rdzeni) odświeżany co sekundę.
-- Ustalono wersję **1.4.0** w tytule aplikacji oraz zaktualizowano `VERSIONING.md` z polityką wersjonowania; dodano:
-	 - eksport przechwyconych pakietów do CSV i PCAP (okno zapisu, domyślne nazwy z timestamp);
-	 - panel szczegółów pakietu (dekodowanie warstw, HEX, ASCII);
-	 - mapowanie numerów protokołów z `config/protocols.yaml`;
-	 - czytelne etykiety interfejsów na Windows (typ, opis, IP zamiast identyfikatorów).  
+ - Ustalono wersję **1.5.9** w tytule aplikacji oraz zaktualizowano `VERSIONING.md`; dodano:
+		- [ ] eksport przechwyconych pakietów do CSV i PCAP (okno zapisu, domyślne nazwy z timestamp)
+		- [ ] panel szczegółów pakietu (dekodowanie warstw, HEX, ASCII)
+		- [ ] mapowanie numerów protokołów z `config/protocols.yaml`
+		- [ ] czytelne etykiety interfejsów na Windows (typ, opis, IP zamiast identyfikatorów)
+		- Pełna obsługa składni Snort:
+			• header, content (offset/depth/within/distance/nocase), pcre, itype, flags
+			• threshold, dsize, length, byte_test, flow, flowbits
+			• http_* (method, uri, client_body), dns.* (query, query_type)
+			• uricontent, rawbytes, isdataat, byte_extract, byte_jump
+			• fragbits, fragoffset, ttl, tos, ip_flags
+			• rate_filter, metadata, classtype, priority, reference
+		- Testy jednostkowe Snort z użyciem PCAP/Scapy
+		- Integracja SNORT_ALERT z GUI (logi w dashboard, zakładka SOC)
+		- Optymalizacja indeksowania reguł Snort (triple-key index)
  - Dodano asynchroniczną zakładkę `Discovery` przeniesioną do osobnego wątku z raportowaniem postępu.
  - Usprawniono `ScannerTab`: skanowanie portów i ping-sweep wykonuje się w oddzielnych wątkach, UI pozostaje responsywne.
  - Dostosowano plan optymalizacji: profile CPU/I/O, przeniesienie blokujących operacji do wątków, batch‐owe aktualizacje GUI, rozważenie multiprocessing dla AI.
+ - Uzupełniono `config/snort.rules` o reguły SSH, FTP, HTTP POST, SQLi, XSS, SMB, floody TCP/UDP, tunneling DNS, NXDOMAIN, cache poisoning, random subdomain i phantom domain.
+ - Dodano regułę detekcji skanów Telnet (5 SYN/60s) i reguły monitorowania specyficznej IP poprzez BPF filtr.
+ - Wyjaśniono obsługę `network_interface` i BPF filtrów w `config/config.yaml`.
+ - Rozszerzono dokumentację TODO i Versioning zgodnie z semver.
 
 ## 📌 Cel projektu
 Jest to modularny, rozszerzalny system do:

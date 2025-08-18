@@ -13,11 +13,10 @@
 
 ## Najbliższe zadania
 - [ ] Priorytet: praca nad optymalizacją i wydajnością programu
-- [ ] Profilowanie CPU i I/O (cProfile, py-spy)
-- [ ] Przechwytywanie pakietów w QThread/QThreadPool zamiast wątku głównym
-- [ ] Równoległe skanowanie sieci za pomocą QRunnable/QThreadPool z ograniczonymi wątkami
-- [ ] Przeniesienie analizy AI (Features→Detection) do procesów (multiprocessing) lub rozszerzeń C++/GPU
-- [ ] Batch-owe aktualizacje GUI (QStandardItemModel zamiast QTableWidget)
+- [ ] Dodanie testów jednostkowych/integracyjnych dla wielowątkowości i synchroniczności
+- [ ] Monitoring metryk CPU/RAM dla poszczególnych modułów w UI
+- [ ] Konfiguracja CI z benchmarkami wydajności
+- [ ] Dalsze optymalizacje: cache ARP, ponowne użycie socketów, minimalizacja syscalli
 - [x] Priorytet: praca nad optymalizacją i wydajnością programu
 - [x] Profilowanie CPU i I/O (cProfile, py-spy)
 - [x] Przechwytywanie pakietów w QThread/QThreadPool zamiast wątku głównym
@@ -30,7 +29,16 @@
 - [ ] Dalsze optymalizacje: cache ARP, ponowne użycie socketów, minimalizacja syscalli
 - [x] Dodano zakładkę `InfoTab` z informacjami o podzespołach komputera (CPU, RAM, GPU, BIOS, płyta główna, dyski, karty sieciowe)
 - [x] Dodano pasek narzędzi z metrykami systemu (CPU%, RAM%, liczba wątków i rdzeni) odświeżany co sekundę
-- [x] Ustalono wersję aplikacji na **1.1.0** i dodano `VERSIONING.md` z polityką wersjonowania
+- [x] Ustalono wersję aplikacji na **1.5.9** i zaktualizowano `VERSIONING.md` z opisem nowych funkcji
+ - [x] Pełna obsługa składni Snort: header, content (offset/depth/within/distance/nocase), pcre, itype, flags
+ - [x] Obsługa threshold, dsize, length, byte_test, flow, flowbits
+ - [x] Parsowanie opcji http_* i dns.* (http_method, http_uri, http_client_body, dns_query, dns_query_type)
+ - [x] Obsługa uricontent, rawbytes, isdataat, byte_extract, byte_jump
+ - [x] Obsługa fragbits, fragoffset, ttl, tos, ip_flags
+ - [x] Implementacja rate_filter, metadata, classtype, priority, reference
+ - [x] Dodano testy jednostkowe Snort z PCAP/Scapy
+ - [x] Integracja SNORT_ALERT z GUI (logi w dashboard, zakładka SOC)
+ - [x] Optymalizacja indeksowania reguł Snort (triple-key index)
   
   <!-- dotychczasowe zadania -->
   - [x] Usprawniono przepływ eventów AI (każdy pakiet → cechy → AI → waga)  <!-- zaimplementowano pipeline w Orchestrator: CaptureModule → FeaturesModule → DetectionModule, sygnały Qt -->
@@ -60,7 +68,6 @@
          
 ## Pomysły na przyszłość
 - [ ] Wizualizacja ruchu sieciowego (wykresy, heatmapy)
-- [ ] Integracja z SIEM/SOC
 - [ ] Wsparcie dla IPv6, VLAN, tuneli
 - [ ] Rozbudowa systemu pluginów (np. pluginy do analizy malware)
 - [ ] Publikować event `SCAN_COMPLETED`.
@@ -104,12 +111,17 @@
 ---
 
 ### plugins/example_plugin.py
-- [ ] Przykładowa implementacja reagująca na NEW_THREAT.
-- [ ] Licznik powtarzających się incydentów z tego samego IP.
-- [ ] Po przekroczeniu progu (np. 3) publikować event BLOCK_IP.
+- [x] Przykładowa implementacja reagująca na NEW_THREAT (deprecated)
+- [x] Licznik powtarzających się incydentów z tego samego IP (wbudowane w SOC)
+- [x] Po przekroczeniu progu (np. 3) publikować event BLOCK_IP (możliwość email)
 
 ---
 
 ### tests/
 - [ ] Testy jednostkowe każdego modułu (mock eventów).
 - [ ] Test integracyjny: capture → features → detection → threat → ui.
+
+### Zakładka Reguły SNORT (snort_rules_tab.py)
+- [x] Tabela z regułami SNORT: kolumny ID, Opis, Reguła, Stan włączony/wyłączony
+- [x] Checkboxy do włączania/dezaktywowania reguł
+- [x] Wyświetlanie surowych reguł i tooltipy

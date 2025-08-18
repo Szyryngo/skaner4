@@ -1,19 +1,1 @@
-ai_model_path: data/models/
 filter: ''
-gui: qt
-network_interface: \Device\NPF_{2F6D1A14-CA27-4B70-A549-1146FE5BD904}
-ui_port: 5000
-window_height: 600
-window_width: 800
-# SIEM/SOC notification settings
-siem:
-	# AI weight threshold for sending email/SMS notifications
-	notification_threshold: 1.5
-	# List of email addresses to notify
-	notification_emails:
-		- admin@example.com
-	# SMTP server configuration
-	smtp_server: smtp.example.com
-	smtp_port: 587
-	smtp_user: user@example.com
-	smtp_pass: yourpassword

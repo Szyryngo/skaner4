@@ -1,0 +1,43 @@
+Oto ogólny plan, jak rozbudować plugin tak, aby AI „rozumiało” i egzekwowało dowolne reguły Snort ładowane z pliku:
+
+Uniwersalny parser reguł
+• Zamień własne proste parsowanie na gotową bibliotekę lub moduł, który potrafi wyciągnąć z tekstu Snort wszystkie sekcje: nagłówki (proto, źródło, cel, porty), oraz klauzule w nawiasach (content, itype, flags, threshold, pcre, flow, dns.*, itp.).
+• Reprezentuj każdą regułę jako obiekt z polami: protocol, src_addr/mask, src_port, dst_addr/mask, dst_port, i słownikiem opcji.
+
+Przechowywanie zasad i dynamiczne przeładowanie
+• Wczytuj reguły przy starcie i na żądanie (watch-owanie pliku lub komenda reload).
+• Po każdej zmianie pliku: wyrzuć starą listę, załaduj na nowo wszystkie reguły.
+
+Dedykowane struktury stanu dla progów (threshold)
+• Dla opcji threshold/type utrzymuj w pamięci liczniki zdarzeń (zestawy znaczników czasu) z kluczami np. według źródła, destynacji lub obu.
+• Przy każdym pakiecie czy evencie aktualizuj odpowiedni bufor czasowy, odpytuj, czy przekroczono liczbę pakietów w danym oknie czasowym.
+
+Obsługa różnych typów opcji w handle_event
+• Filtr nagłówka: odrzucaj pakiety, których proto/porty/adresy nie pasują do reguły.
+• itype – dla ICMP porównuj typ pakietu.
+• flags – dla TCP sprawdzaj bitmapę flag (S, F, R, ACK itd.).
+• content / pcre – wyszukuj w payload: proste porównanie lub regex.
+• flow / http_* / dns.* – stosuj odpowiednie warunki (np. czy to fragment HTTP, zapytanie DNS).
+• dsize/length – porównuj rozmiar pakietu lub aplikacji.
+• inne: depth, offset, byte_test, flowbits itp. – dorzuć po kolei.
+
+Architektura filtrowania
+• Przetwarzaj reguły w kolejności:
+
+nagłówek (proto/adresy/porty)
+opcje „statyczne” (content, itype, flags)
+opcje „dynamiczne” (threshold, byte_test, flowbits)
+• Tylko gdy wszystkie warunki spełnione, wygeneruj Event(“SNORT_ALERT”, …).
+Testy i walidacja
+• Przygotuj zestaw pakietów testowych (pcapy) pokrywających różne rodzaje reguł (ICMP, DNS, HTTP, SYN-scan).
+• Automatycznie weryfikuj, że każdy test wywołuje alert lub nie, zgodnie z definicją reguły.
+
+Monitorowanie wydajności
+• Przy dużej liczbie reguł i wysokim ruchu zastosuj indeksowanie (np. grupowanie reguł po protokole + portach) żeby nie iterować całego zbioru przy każdym pakiecie.
+• Cache’uj (lub kompiluj) wyrażenia PCRE, unikaj wielokrotnej instancjalizacji regexów.
+
+UX/config
+• Dodaj w config/plugins_config opcję reload czy ścieżkę do dodatkowych plików reguł.
+• Udostępnij komendy w interfejsie UI do włączania/wyłączania poszczególnych reguł (enable_rule/disable_rule).
+
+Taki modularny plan zapewni, że każda dopisana do pliku reguła będzie parsowana i rozpatrywana przez AI w sposób zgodny z logiką Snort.

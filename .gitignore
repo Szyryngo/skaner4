@@ -6,3 +6,5 @@ __pycache__/
 backups/
 # Local backup zip files
 backups/*.zip
+# Ignore CSV export files
+*.csv

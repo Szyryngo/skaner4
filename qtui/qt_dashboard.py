@@ -147,8 +147,26 @@ Methods
         from modules.capture import CaptureModule
         self._capture = CaptureModule()
         self._capture.initialize({})
-        # Protocol number to name mapping for display
-        self.protocols = {1: 'ICMP', 6: 'TCP', 17: 'UDP'}
+        # Load protocol mapping from config/protocols.yaml
+        import yaml, os
+        proto_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'config', 'protocols.yaml'))
+        try:
+            with open(proto_path, 'r', encoding='utf-8') as f:
+                data = yaml.safe_load(f) or {}
+            # Build mapping only for numeric keys, skip ranges or invalid entries
+            mapping = {}
+            for key, name in data.items():
+                # Add mapping for integer keys and their string equivalents
+                if isinstance(key, int):
+                    mapping[key] = name
+                    mapping[str(key)] = name
+                elif isinstance(key, str) and key.isdigit():
+                    num = int(key)
+                    mapping[num] = name
+                    mapping[key] = name
+            self.protocols = mapping
+        except Exception:
+            self.protocols = {}
         # Initialize AI pipeline modules
         from modules.features import FeaturesModule
         self._features_module = FeaturesModule()
@@ -525,7 +543,15 @@ Methods
             if getattr(self._detection_module, 'use_nn', False) and hasattr(self._detection_module, 'nn_model'):
                 weight = float(self._detection_module.nn_model.predict(X)[0][0])
             elif hasattr(self._detection_module, 'if_model'):
-                score = float(self._detection_module.if_model.decision_function(X)[0])
+                # Ensure feature vector matches model dimension
+                model = self._detection_module.if_model
+                expected = getattr(model, 'n_features_in_', X.shape[1])
+                # Pad or trim X as needed
+                if X.shape[1] < expected:
+                    X = _np.pad(X, ((0, 0), (0, expected - X.shape[1])), constant_values=0)
+                elif X.shape[1] > expected:
+                    X = X[:, :expected]
+                score = float(model.decision_function(X)[0])
                 weight = abs(score)
         meta['ai_weight'] = round(weight, 2)
         # Run Snort rules plugins
@@ -544,12 +570,17 @@ Methods
         self._packet_counter += 1
         self.packets.insertRow(0)
         # Map protocol
+        # Translate protocol number to name based on mapping
         raw_proto = meta.get('protocol', '')
-        try:
+        display_proto = raw_proto
+        # Integer protocol code
+        if isinstance(raw_proto, int):
+            display_proto = self.protocols.get(raw_proto, str(raw_proto))
+        # String numeric protocol code
+        elif isinstance(raw_proto, str) and raw_proto.isdigit():
             num = int(raw_proto)
             display_proto = self.protocols.get(num, raw_proto)
-        except:
-            display_proto = raw_proto
+        # Leave other strings (e.g., 'ARP') unchanged
         vals = [
             str(self._packet_counter),
             meta.get('timestamp', ''),

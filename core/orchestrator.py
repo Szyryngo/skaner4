@@ -46,6 +46,13 @@ class Orchestrator:
     def run(self):
         """Główna pętla eventów."""
         self.initialize()
+        # Jeśli jest CaptureModule, rozpocznij sniffing pakietów
+        for module in self.modules:
+            if hasattr(module, '_start_sniffing'):
+                try:
+                    module._start_sniffing()
+                except Exception:
+                    pass
         import concurrent.futures
         from concurrent.futures import ThreadPoolExecutor, as_completed
         # Wykorzystanie puli wątków do równoległego generowania zdarzeń
@@ -55,9 +62,14 @@ class Orchestrator:
                 futures = {executor.submit(obj.generate_event): obj for obj in (self.modules + self.plugins)}
                 for fut in as_completed(futures):
                     try:
-                        event = fut.result()
-                        if event:
-                            self.event_queue.append(event)
+                        result = fut.result()
+                        # przyjmuj tylko Event lub listę Event
+                        if isinstance(result, Event):
+                            self.event_queue.append(result)
+                        elif hasattr(result, '__iter__'):
+                            for ev in result:
+                                if isinstance(ev, Event):
+                                    self.event_queue.append(ev)
                     except Exception as e:
                         print(f'Błąd generate_event w module {futures[fut].__class__.__name__}: {e}')
                 # Obsługa kolejki zdarzeń
@@ -66,17 +78,34 @@ class Orchestrator:
                     for obj in (self.modules + self.plugins):
                         try:
                             result = obj.handle_event(event)
-                            if result:
-                                if isinstance(result, Event):
-                                    self.event_queue.append(result)
-                                    if self.gui and result.type == 'DEVICE_DETECTED':
-                                        self.gui.handle_event(result)
-                                elif hasattr(result, '__iter__'):
-                                    for e in result:
-                                        if isinstance(e, Event):
-                                            self.event_queue.append(e)
-                                            if self.gui and e.type == 'DEVICE_DETECTED':
-                                                self.gui.handle_event(e)
+                            if not result:
+                                continue
+                            # Obsługa pojedynczego eventu
+                            if isinstance(result, Event):
+                                # drukuj SNORT_ALERT do konsoli
+                                if result.type == 'SNORT_ALERT':
+                                    sid = result.data.get('sid')
+                                    msg = result.data.get('msg')
+                                    src = result.data.get('src_ip')
+                                    dst = result.data.get('dst_ip')
+                                    print(f'[SNORT_ALERT] SID={sid} MSG="{msg}" SRC={src} DST={dst}')
+                                self.event_queue.append(result)
+                                # GUI obsługuje tylko DEVICE_DETECTED
+                                if self.gui and result.type == 'DEVICE_DETECTED':
+                                    self.gui.handle_event(result)
+                            # Obsługa wielu eventów
+                            elif hasattr(result, '__iter__'):
+                                for e in result:
+                                    if isinstance(e, Event):
+                                        if e.type == 'SNORT_ALERT':
+                                            sid = e.data.get('sid')
+                                            msg = e.data.get('msg')
+                                            src = e.data.get('src_ip')
+                                            dst = e.data.get('dst_ip')
+                                            print(f'[SNORT_ALERT] SID={sid} MSG="{msg}" SRC={src} DST={dst}')
+                                        self.event_queue.append(e)
+                                        if self.gui and e.type == 'DEVICE_DETECTED':
+                                            self.gui.handle_event(e)
                         except Exception as e:
                             print(f'Błąd w module/pluginie {obj.__class__.__name__}: {e}')
                 # Krótkie opóźnienie między iteracjami

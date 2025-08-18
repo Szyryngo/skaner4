@@ -1,5 +1,6 @@
 import os
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QTextEdit
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QTableWidget, QTableWidgetItem, QCheckBox, QLabel
+from PyQt5.QtGui import QFont
 
 class SnortRulesTab(QWidget):
     """Tab displaying the contents of the Snort rules file."""
@@ -9,27 +10,34 @@ class SnortRulesTab(QWidget):
         from plugins.snort_rules_plugin import SnortRulesPlugin
         snort = next((p for p in plugins if isinstance(p, SnortRulesPlugin)), None)
         layout = QVBoxLayout()
+        # Table for rules: ID, Opis, Reguła, Włączone
         if snort and hasattr(snort, 'rules'):
-            # List rules with checkboxes
-            from PyQt5.QtWidgets import QScrollArea, QCheckBox, QLabel
-            scroll = QScrollArea()
-            container = QWidget()
-            vlay = QVBoxLayout()
-            if not snort.rules:
-                vlay.addWidget(QLabel('Brak reguł do wyświetlenia'))
-            for rule in snort.rules:
-                sid = rule.get('sid')
-                msg = rule.get('msg')
-                cb = QCheckBox(f"{sid}: {msg}")
-                cb.setChecked(sid in getattr(snort, 'enabled_sids', []))
-                # Toggle rule enable/disable
-                cb.stateChanged.connect(lambda state, sid=sid, plugin=snort: plugin.enable_rule(sid) if state else plugin.disable_rule(sid))
-                vlay.addWidget(cb)
-            container.setLayout(vlay)
-            scroll.setWidget(container)
-            scroll.setWidgetResizable(True)
-            layout.addWidget(scroll)
+            rules = snort.rules or []
+            if not rules:
+                layout.addWidget(QLabel('Brak reguł do wyświetlenia'))
+            else:
+                table = QTableWidget(len(rules), 4)
+                table.setHorizontalHeaderLabels(['ID', 'Opis', 'Reguła', 'Włączone'])
+                for row, rule in enumerate(rules):
+                    sid = rule.get('sid', '')
+                    msg = rule.get('msg', '')
+                    raw = rule.get('raw', '')
+                    # ID
+                    table.setItem(row, 0, QTableWidgetItem(str(sid)))
+                    # Description
+                    table.setItem(row, 1, QTableWidgetItem(msg))
+                    # Raw rule text
+                    item_raw = QTableWidgetItem(raw)
+                    item_raw.setToolTip(raw)
+                    table.setItem(row, 2, item_raw)
+                    # Enable/disable checkbox
+                    cb = QCheckBox()
+                    cb.setChecked(sid in getattr(snort, 'enabled_sids', []))
+                    cb.stateChanged.connect(lambda state, sid=sid, plugin=snort: plugin.enable_rule(sid) if state else plugin.disable_rule(sid))
+                    table.setCellWidget(row, 3, cb)
+                table.resizeColumnsToContents()
+                table.resizeRowsToContents()
+                layout.addWidget(table)
         else:
-            lbl = QLabel('Plugin SnortRulesPlugin nie został załadowany')
-            layout.addWidget(lbl)
+            layout.addWidget(QLabel('Plugin SnortRulesPlugin nie został załadowany'))
         self.setLayout(layout)

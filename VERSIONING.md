@@ -15,11 +15,13 @@
 	- **1.0.0** — początkowe stabilne wydanie AI Network Packet Analyzer Pro.
 	- **1.1.0** — dodano asynchroniczny Ping-Sweep (Discovery) w osobnym wątku oraz ulepszono ScannerTab.
 
-	 - **1.2.0** — poprawki i nowe funkcje GUI:
+	- **1.2.0** — poprawki i nowe funkcje GUI:
 		 - eksport pakietów do CSV i PCAP (okno zapisu, domyślne nazwy z timestamp);
 		 - wyświetlanie szczegółów pakietu (dekodowanie warstw, HEX, ASCII);
 		 - mapowanie numerów protokołów z `config/protocols.yaml`;
-		 - czytelne etykiety interfejsów na Windows (typ, opis, IP zamiast identyfikatorów).
+ 		 - czytelne etykiety interfejsów na Windows (typ, opis, IP zamiast identyfikatorów).
+ 	- **1.4.0** — dodano zakładkę Info, pasek metryk systemu, refaktoryzację dashboardu.
+ 	- **1.5.0** — rozbudowa reguł Snort, tabela reguł SNORT, wyciszone debugi, automatyczne logowanie raw_event w SOC, rozszerzone reguły exfiltration, DNS attacks, Telnet scan.
 
 ## Wytyczne dotyczące wydań
 
