@@ -1,0 +1,43 @@
+Oto propozycja planu wizualizacji i logiki „kolorowania” węzłów oraz treści w panelu Logs & Alerts:
+
+Mapa sieci – kolor węzłów
+• brak aktywności → szary (domyślny)
+• tylko zwykłe zdarzenia (raw_event) → zielony
+• pojawiły się zdarzenia z podwyższonym ai_weight (np. >1.0) → żółty
+• wykryty SNORT_ALERT lub AI_ALERT o ważności ≥ progu → czerwony
+• opcjonalnie gradient od zielonego do czerwonego wg wartości ai_weight
+
+Legendy i tooltipy
+• w prawym górnym rogu krótkie wytłumaczenie mapy (kolory + progi)
+• najechanie na węzeł → tooltip z ostatnim statusem (czas, typ alertu, krótki opis)
+
+Logs & Alerts – tabela
+Kolumny:
+– Timestamp
+– Src IP → węzeł źródłowy
+– Dst IP → węzeł docelowy
+– Typ zdarzenia: RAW / SNORT_ALERT / AI_ALERT
+– Źródło: „capture”, „snort”, „ai”
+– Severity / Waga: liczba ai_weight lub poziom (Low/Medium/High)
+– Details: krótki opis (SID, msg, url, byte_test itp.)
+
+Funkcje:
+• filtrowanie po typie, IP, severity
+• sortowanie po czasie i severity
+• rozwiniecie wiersza / podwójny klik → modal z pełnymi danymi Event.data
+
+Przepływ danych
+– każde zdarzenie trafi do Logs & Alerts jako wiersz RAW
+– jeżeli plugin Snort zwróci alert → dodatkowy wiersz SNORT_ALERT, node zmienia kolor
+– jeżeli DetectionModule wygeneruje AI_ALERT → wiersz AI_ALERT, node może dostać wyższy priorytet kolorystyczny
+
+Zadania implementacyjne
+
+Dodać do SOCTab strukturę przechowującą per-node ostatni „status”
+Przy generacji threat (SNORT/AI) ustawiać status i wywoływać metodę update_node_color(ip)
+Metoda update_node_color decyduje o kolorze na podstawie priorytetów (SNORT > AI > RAW)
+Rozbudować logowanie w _on_worker_threat, aby wpisywało do QTableWidget z odpowiednimi kolumnami
+Dodać legendę i tooltipy w SOCLayout
+
+W okienkach "Logs and Alerts", "alerty według źródła", "Alert Security Chart" - powinno coś sie pokazywać
+Oraz w wyskakującym okienku w "Trafic history" - nie powinno być RAW_PACKET a jakaś czytelna dla użytkownika informacja.

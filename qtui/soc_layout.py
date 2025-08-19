@@ -40,6 +40,18 @@ class SOCLayout:
         map_layout = QVBoxLayout()
         map_view = ZoomableGraphicsView()
         map_layout.addWidget(map_view)
+        # Legend for node colors
+        legend_layout = QHBoxLayout()
+        # Color indicators as small colored squares
+        for color, desc in [('lightgray', 'No activity'), ('green', 'Raw event'), ('yellow', 'Medium alert'), ('red', 'High/Threat')] :
+            square = QLabel()
+            square.setFixedSize(15, 15)
+            square.setStyleSheet(f'background-color: {color}; border: 1px solid black;')
+            legend_layout.addWidget(square)
+            lbl = QLabel(desc)
+            legend_layout.addWidget(lbl)
+        legend_layout.addStretch()
+        map_layout.addLayout(legend_layout)
         map_group.setLayout(map_layout)
 
         # Right: Logs, Grouped alerts, Chart
@@ -56,8 +68,11 @@ class SOCLayout:
         for lbl in (low_label, medium_label, high_label):
             summary_layout.addWidget(lbl)
         log_layout.addLayout(summary_layout)
-        log_table = QTableWidget(0, 6)
-        log_table.setHorizontalHeaderLabels(['Time','Event','Severity','Source','Destination','Confidence'])
+        # Logs table: Timestamp, Src IP, Dst IP, Event type, Source, Severity, Details
+        log_table = QTableWidget(0, 7)
+        log_table.setHorizontalHeaderLabels([
+            'Timestamp', 'Src IP', 'Dst IP', 'Event', 'Source', 'Severity', 'Details'
+        ])
         log_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         log_layout.addWidget(log_table)
         act_layout = QHBoxLayout()
@@ -70,6 +85,15 @@ class SOCLayout:
         log_layout.addLayout(act_layout)
         log_group.setLayout(log_layout)
 
+        # Raw Events panel
+        raw_group = QGroupBox('Raw Events')
+        raw_layout = QVBoxLayout()
+        raw_table = QTableWidget(0, 4)
+        raw_table.setHorizontalHeaderLabels(['Timestamp', 'Src IP', 'Dst IP', 'Type'])
+        raw_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        raw_layout.addWidget(raw_table)
+        raw_group.setLayout(raw_layout)
+
         # Grouped by source IP
         group_box = QGroupBox('Alerty wg źródłowego IP')
         group_layout = QVBoxLayout()
@@ -79,6 +103,15 @@ class SOCLayout:
         group_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
         group_layout.addWidget(group_table)
         group_box.setLayout(group_layout)
+
+        # AI Scores panel
+        ai_group = QGroupBox('AI Scores')
+        ai_layout = QVBoxLayout()
+        ai_table = QTableWidget(0, 5)
+        ai_table.setHorizontalHeaderLabels(['Timestamp', 'Src IP', 'Dst IP', 'Score', 'Details'])
+        ai_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        ai_layout.addWidget(ai_table)
+        ai_group.setLayout(ai_layout)
 
         # Chart
         chart_group = QGroupBox('Alert Severity Chart')
@@ -92,7 +125,9 @@ class SOCLayout:
         content_layout.addWidget(map_group, stretch=3)
         right_layout = QVBoxLayout()
         right_layout.addWidget(log_group, stretch=2)
+        right_layout.addWidget(raw_group, stretch=1)
         right_layout.addWidget(group_box, stretch=1)
+        right_layout.addWidget(ai_group, stretch=1)
         right_layout.addWidget(chart_group, stretch=1)
         content_layout.addLayout(right_layout, stretch=2)
         main_layout.addLayout(content_layout)
@@ -107,6 +142,7 @@ class SOCLayout:
             'map_view': map_view,
             'filter_input': filter_input,
             'log_table': log_table,
+            'raw_table': raw_table,
             'low_label': low_label,
             'medium_label': medium_label,
             'high_label': high_label,
@@ -114,5 +150,7 @@ class SOCLayout:
             'email_btn': email_btn,
             'report_btn': report_btn,
             'cmd_log': cmd_log,
+            'group_table': group_table,
+            'ai_table': ai_table,
             'chart_canvas': canvas
         }

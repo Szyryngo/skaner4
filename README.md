@@ -21,7 +21,7 @@ Repozytorium: https://github.com/Szyryngo/skaner4
  	- Rozbudowano panel szczegółów: dekodowanie warstw protokołu (Scapy) oraz tłumaczenie numerów protokołów z config/protocols.yaml.
  - Dodano zakładkę `Info` z informacjami o podzespołach komputera (CPU, RAM, GPU, BIOS, płyta główna, dyski, karty sieciowe).
  - Dodano pasek narzędzi z metrykami systemu (CPU%, RAM%, liczba wątków i rdzeni) odświeżany co sekundę.
- - Ustalono wersję **1.5.9** w tytule aplikacji oraz zaktualizowano `VERSIONING.md`; dodano:
+- Ustalono wersję **1.5.10** w tytule aplikacji oraz zaktualizowano `VERSIONING.md`; dodano:
 		- [ ] eksport przechwyconych pakietów do CSV i PCAP (okno zapisu, domyślne nazwy z timestamp)
 		- [ ] panel szczegółów pakietu (dekodowanie warstw, HEX, ASCII)
 		- [ ] mapowanie numerów protokołów z `config/protocols.yaml`
@@ -151,4 +151,7 @@ Program domyślnie uruchamia natywny GUI PyQt5 (main.py → qtui/qt_dashboard.py
 ## Opcjonalne modele AI
 - IsolationForest (zewnętrzny model w `data/models/isolation_forest.joblib`)
 - Sieć neuronowa (TensorFlow/Keras) – jeśli dodasz `tensorflow` do `requirements.txt`, w `DetectionModule` możesz wczytać `nn_model.h5` i używać predykcji pravdopodobieństwa anomalii.
+
+## Plany dotyczące czarnej listy IP
+- Dodanie czarnej listy adresów IP: przy wykryciu adresu z czarnej listy automatyczny, natychmiastowy alert oraz wyróżnienie w SOC kolorem czarnym
 ```

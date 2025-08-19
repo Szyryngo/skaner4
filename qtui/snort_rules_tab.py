@@ -13,6 +13,15 @@ class SnortRulesTab(QWidget):
         # Table for rules: ID, Opis, Reguła, Włączone
         if snort and hasattr(snort, 'rules'):
             rules = snort.rules or []
+            # Deduplicate rules by SID to avoid duplicates in UI
+            unique_rules = []
+            seen_sids = set()
+            for rule in rules:
+                sid = rule.get('sid')
+                if sid not in seen_sids:
+                    seen_sids.add(sid)
+                    unique_rules.append(rule)
+            rules = unique_rules
             if not rules:
                 layout.addWidget(QLabel('Brak reguł do wyświetlenia'))
             else:

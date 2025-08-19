@@ -29,7 +29,7 @@
 - [ ] Dalsze optymalizacje: cache ARP, ponowne użycie socketów, minimalizacja syscalli
 - [x] Dodano zakładkę `InfoTab` z informacjami o podzespołach komputera (CPU, RAM, GPU, BIOS, płyta główna, dyski, karty sieciowe)
 - [x] Dodano pasek narzędzi z metrykami systemu (CPU%, RAM%, liczba wątków i rdzeni) odświeżany co sekundę
-- [x] Ustalono wersję aplikacji na **1.5.9** i zaktualizowano `VERSIONING.md` z opisem nowych funkcji
+- [x] Ustalono wersję aplikacji na **1.5.10** i zaktualizowano `VERSIONING.md` z opisem nowych funkcji
  - [x] Pełna obsługa składni Snort: header, content (offset/depth/within/distance/nocase), pcre, itype, flags
  - [x] Obsługa threshold, dsize, length, byte_test, flow, flowbits
  - [x] Parsowanie opcji http_* i dns.* (http_method, http_uri, http_client_body, dns_query, dns_query_type)
@@ -71,6 +71,7 @@
 - [ ] Wsparcie dla IPv6, VLAN, tuneli
 - [ ] Rozbudowa systemu pluginów (np. pluginy do analizy malware)
 - [ ] Publikować event `SCAN_COMPLETED`.
+- [ ] Dodanie czarnej listy adresów IP: przy wykryciu wpisu na czarnej liście natychmiastowy alert i wyróżnienie w SOC kolorem czarnym
 
 ---
 

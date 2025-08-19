@@ -4,8 +4,12 @@ import threading
 import time
 import ipaddress
 import operator
+import yaml
+
 from core.interfaces import ModuleBase
 from core.events import Event
+# Suppress print statements to prevent stdout locking at shutdown
+print = lambda *args, **kwargs: None
 
 try:
     import snort_parser  # type: ignore
@@ -28,6 +32,11 @@ class SnortRulesPlugin(ModuleBase):
         self.threshold_states = {}
         # stany dla flowbits
         self.flowbit_states = {}
+        # enabled rule IDs persistence
+        self.enabled_sids = set()
+        # state file for persisting enabled/disabled rule states
+        config_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'config'))
+        self.state_file = os.path.join(config_dir, 'snort_rules_state.yaml')
 
     def initialize(self, config):
         self.config = config
@@ -39,6 +48,16 @@ class SnortRulesPlugin(ModuleBase):
             self.rules_path = default_path
         self.rules_mtime = None
         self._load_rules()
+        # load persisted enabled/disabled states
+        try:
+            with open(self.state_file, 'r', encoding='utf-8') as f:
+                data = yaml.safe_load(f) or {}
+                sids = data.get('enabled_sids', [])
+                self.enabled_sids = set(sids)
+        except FileNotFoundError:
+            pass
+        except Exception:
+            pass
 
         def _watch_rules():
             while True:
@@ -369,13 +388,24 @@ class SnortRulesPlugin(ModuleBase):
         return None
 
     def enable_rule(self, sid):
-        if not hasattr(self, 'enabled_sids'):
-            self.enabled_sids = set()
         self.enabled_sids.add(sid)
+        # persist state
+        try:
+            os.makedirs(os.path.dirname(self.state_file), exist_ok=True)
+            with open(self.state_file, 'w', encoding='utf-8') as f:
+                yaml.safe_dump({'enabled_sids': list(self.enabled_sids)}, f)
+        except Exception:
+            pass
 
     def disable_rule(self, sid):
-        if hasattr(self, 'enabled_sids'):
-            self.enabled_sids.discard(sid)
+        self.enabled_sids.discard(sid)
+        # persist state
+        try:
+            os.makedirs(os.path.dirname(self.state_file), exist_ok=True)
+            with open(self.state_file, 'w', encoding='utf-8') as f:
+                yaml.safe_dump({'enabled_sids': list(self.enabled_sids)}, f)
+        except Exception:
+            pass
 
     def reload_rules(self):
         self._load_rules()

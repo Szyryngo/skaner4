@@ -1,0 +1,46 @@
+Oto propozycja, jak wypełnić pozostałe “puste” sekcje w zakładce SOC (poza mapą), tak żeby pojawiały się tam sensowne wyniki i reagowały na sygnały z worker-a:
+
+Tabela surowych zdarzeń (Raw Events)
+• Widget: QTableWidget z kolumnami: Timestamp, Src IP, Dst IP, Proto, Size itp.
+• Dane: slot _on_raw_event(event) doda każdy event na koniec tabeli.
+• Implementacja: połączenie sygnału raw_event → _on_raw_event; w nim table.insertRow(), wypełnianie QTableWidgetItem i ewentualne filtrowanie.
+
+Tabela alertów zagrożeń (Threat Alerts)
+• Widget: QTableWidget z kolumnami: SID/ID, Msg, Src, Dst, Level (np. z pluginów snort/IDS).
+• Dane: slot _on_worker_threat(event) dodaje wiersz z danymi z Event(‘THREAT’, …).
+• Implementacja: podobnie do raw, ale może też kolorować wiersze wg priorytetu.
+
+Panel AI Score
+• Widget: QTableWidget lub wykres słupkowy pokazujący ostatnie oceny AI dla węzłów.
+• Dane: slot _on_ai_score(node_id, score) – dodaje/aktualizuje wiersz w tabeli lub aktualizuje wykres.
+• Implementacja: przechowywać w dict node_id → row, przy update zmieniać wartość i kolor tła komórki wg progu.
+
+Statystyki czasu rzeczywistego (Charts)
+• Widget: osadzone wykresy (np. PyQtGraph) pokazujące liczbę eventów/alertów w czasie (timeline).
+• Dane: bufor z timestampami; timer co 1 s odświeża wykres, rysując nowe punkty.
+• Implementacja: w __init__ skonfigurować pg.PlotWidget, trzymać listy X/Y i w _on_raw_event/_on_worker_threat dodawać nowy punkt.
+
+Panel eksportu/raportów
+• Widget: formularz i przycisk „Eksportuj dane” do CSV/PDF.
+• Funkcja: po kliknięciu zbiera aktualne wiersze z tabel i zapisuje plik.
+
+Ustawienia filtrów
+• Widget: grupy checkboxów/dropdown z protokołami (TCP/UDP/ICMP), poziomami zagrożeń, zakresami czasu.
+• Funkcja: w slotach _on_raw_event i _on_worker_threat najpierw sprawdzać, czy event spełnia aktywne filtry.
+
+Wyświetlanie szczegółów pakietu
+• Widget: panel tekstowy (QTextEdit) pokazujący surowe dane bajtowe lub JSON eventu po zaznaczeniu wiersza.
+• Funkcja: po zaznaczeniu wiersza w Raw/Threat tabeli, slot cellClicked wypełnia QTextEdit odpowiednimi danymi.
+
+Kroki do implementacji:
+
+W SOCTab.__init__ dodać widgety np. w układzie QHBoxLayout/QSplitter albo QTabWidget.
+Zadeklarować nowe QTableWidget, PlotWidget, QTextEdit i przyciski; dodać je do layoutu.
+We wszystkich odpowiednich connect(...) powiązać sygnały workerskie z nowymi slotami.
+Napisać sloty _on_raw_event, _on_worker_threat, _on_ai_score, które będą:
+dodawać wiersze do tabel,
+aktualizować kolory,
+zapisywać dane do buforów statystyk,
+odświeżać wykresy.
+Dodać UI controls do filtrowania i eksportu, oraz powiązać je z logiką.
+Taki plan pozwoli wypełnić wszystkie dotychczas puste panele w zakładce SOC realnymi danymi i interakcją.
