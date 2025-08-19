@@ -1,18 +1,19 @@
-from core.interfaces import ModuleBase
+"""Capture Module - capture network packets asynchronously and generate NEW_PACKET events.
+
+This module uses scapy's AsyncSniffer to listen on a network interface,
+construct packet metadata dictionaries, and provide them via generate_event()."""
+
 from core.events import Event
-from scapy.all import AsyncSniffer, raw, sniff, Ether, ARP
-from scapy.layers.inet import TCP, UDP, ICMP
+from core.interfaces import ModuleBase
+from scapy.all import AsyncSniffer, Ether, ARP, TCP, UDP, ICMP, raw, sniff
 
 
 class CaptureModule(ModuleBase):
+    """Capture network packets and emit NEW_PACKET events.
+
+    Uses AsyncSniffer from scapy to asynchronously capture traffic,
+    extract relevant headers, and queue packet events for processing.
     """
-Attributes
-----------
-
-Methods
--------
-
-"""
 
     def test_all_interfaces(self):
         """Testuje sniffing na wszystkich interfejsach (diagnostyka)."""
@@ -53,6 +54,16 @@ Methods
 
         # Callback for each captured packet
         def pkt_callback(pkt):
+            """Internal callback for each captured packet.
+
+            Extracts protocol, IP, MAC, ports, flags, payload size, and raw bytes,
+            builds an event data dict, and stores it as self._last_packet.
+
+            Parameters
+            ----------
+            pkt : scapy.Packet
+                The captured packet object.
+            """
             try:
                 if pkt.haslayer('IP') or pkt.haslayer(ARP):
                     # przygotuj domyślne transport layer info
@@ -140,9 +151,16 @@ Methods
         pass
 
     def generate_event(self):
+        """Return a NEW_PACKET Event for the last captured packet.
+
+        Checks if a packet has been captured by pkt_callback(),
+        wraps it in an Event('NEW_PACKET', data) object, and clears the buffer.
+
+        Returns
+        -------
+        Event or None
+            An Event object with type 'NEW_PACKET' and packet data, or None if no packet.
         """
-		Zwraca event NEW_PACKET na podstawie przechwyconego pakietu przez scapy.
-		"""
         # Debug prints disabled to avoid buffered stdout issues
         if self._last_packet:
             pkt = self._last_packet

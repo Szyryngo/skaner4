@@ -1,3 +1,8 @@
+"""Detection Module - detect anomalies and classify threats using AI models and Snort rules.
+
+This module loads TensorFlow neural network and Isolation Forest models,
+integrates with SnortRulesPlugin to track rule matches, processes NEW_FEATURES and SNORT_ALERT events,
+and emits NEW_THREAT events when a threat is detected."""
 from core.interfaces import ModuleBase
 from core.events import Event
 import os
@@ -6,13 +11,20 @@ from plugins.snort_rules_plugin import SnortRulesPlugin
 
 
 class DetectionModule(ModuleBase):
+    """AI-based module for threat detection and classification.
+
+    Listens for SNORT_ALERT to record rule matches and NEW_FEATURES to perform AI inference.
+    Emits NEW_THREAT events with threat metadata when anomalies are detected.
     """
-	Moduł AI do detekcji anomalii i klasyfikacji zagrożeń.
-	Odbiera NEW_FEATURES, publikuje NEW_THREAT.
-	"""
 
     def initialize(self, config):
-        """Inicjalizuje moduł (ładowanie modeli AI)."""
+        """Initialize detection module with configuration and load models.
+
+        Parameters
+        ----------
+        config : dict
+            Configuration settings including model paths and plugin options.
+        """
         self.config = config
         # Initialize Snort rules plugin and prepare rule flags
         self.snort_plugin = SnortRulesPlugin()
@@ -64,7 +76,20 @@ class DetectionModule(ModuleBase):
             dump(self.if_model, self.if_model_path)
 
     def handle_event(self, event):
-        """Obsługuje eventy SNORT_ALERT i NEW_FEATURES, wykonuje detekcję AI."""
+        """Handle SNORT_ALERT and NEW_FEATURES events to prepare for threat inference.
+
+        SNORT_ALERT: collect rule SID for feature augmentation.
+        NEW_FEATURES: assemble feature vector and store for inference.
+
+        Parameters
+        ----------
+        event : Event
+            Incoming event object to process.
+
+        Returns
+        -------
+        None
+        """
         # Collect Snort rule matches by SID
         if event.type == 'SNORT_ALERT':
             sid = event.data.get('sid')
@@ -100,9 +125,16 @@ class DetectionModule(ModuleBase):
             self._last_features_meta = features
 
     def generate_event(self):
+        """Perform AI inference and generate a NEW_THREAT event if a threat is detected.
+
+        Chooses between neural network and Isolation Forest models based on availability,
+        computes prediction, builds threat data dictionary, and returns NEW_THREAT event.
+
+        Returns
+        -------
+        Event or None
+            Event with type 'NEW_THREAT' and threat details, or None if no threat.
         """
-		Generuje event NEW_THREAT na podstawie predykcji AI (NN lub IF).
-		"""
         if not hasattr(self, '_last_features'):
             return None
         X = np.array(self._last_features).reshape(1, -1)

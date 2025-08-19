@@ -1,17 +1,19 @@
+"""Core interfaces module - define base class for application modules and plugins."""
+
 class ModuleBase:
+    """Abstract base class that all modules and plugins must extend.
+
+    Defines initialize, handle_event, and generate_event lifecycle methods.
     """
-	Bazowa klasa interfejsu dla wszystkich modułów i pluginów.
-	Każdy moduł musi ją implementować.
-	"""
 
     def initialize(self, config):
-        """Inicjalizuje moduł z podaną konfiguracją."""
+        """Initialize the module or plugin with the provided config dictionary."""
         pass
 
     def handle_event(self, event):
-        """Obsługuje event przekazany przez orchestratora."""
+        """Handle an incoming event dispatched by the orchestrator."""
         pass
 
     def generate_event(self):
-        """Zwraca nowy event do rozesłania (lub None jeśli brak)."""
+        """Generate a new event to dispatch, or return None if no event to send."""
         return None

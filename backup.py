@@ -1,3 +1,4 @@
+"""Module backup - description."""
 import os
 import zipfile
 import datetime
@@ -8,6 +9,7 @@ Creates a ZIP archive of the project folder with a timestamp.
 """
 
 def create_backup():
+    '''Function create_backup - description.'''
     # Determine project root (directory containing this script)
     project_root = os.path.abspath(os.path.dirname(__file__))
     # Create backups directory

@@ -185,6 +185,7 @@ class NNLayout:
         )
 
     def _on_cancel(self):
+        '''Function _on_cancel - description.'''
         from datetime import datetime
         self._cancel_requested = True
         self.cmd_log.append(f"[{datetime.now().strftime('%H:%M:%S')}] Anulowano trening sieci")
@@ -232,10 +233,13 @@ class NNLayout:
             except Exception as e:
                 # Fallback: no TF available, use dummy model
                 class DummyModel:
+                    '''Class DummyModel - description.'''
                     def predict(self, X):
+                        '''Function predict - description.'''
                         import numpy as _np
                         return _np.zeros(len(X))
                     def predict_proba(self, X):
+                        '''Function predict_proba - description.'''
                         import numpy as _np
                         length = len(X)
                         return _np.vstack([_np.ones(length), _np.zeros(length)]).T

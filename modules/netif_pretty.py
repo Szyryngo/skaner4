@@ -1,3 +1,4 @@
+"""Pretty Network Interface utilities - generate user-friendly interface listings."""
 import sys
 from scapy.all import get_if_list, get_if_addr, get_if_hwaddr
 try:
@@ -11,14 +12,18 @@ except ImportError:
 
 
 def _iface_type_label(iface):
+    """Return a human-readable label for interface type based on name.
+
+    Parameters
+    ----------
+    iface : str
+        Technical interface name.
+
+    Returns
+    -------
+    str
+        One of 'Wi-Fi', 'Ethernet', 'Loopback', 'VPN', 'Bluetooth', or 'Inny'.
     """
-Parameters
-----------
-
-Returns
--------
-
-"""
     name = iface.lower()
     if 'wi-fi' in name or 'wlan' in name or 'wireless' in name:
         return 'Wi-Fi'
@@ -34,9 +39,15 @@ Returns
 
 
 def get_interfaces_pretty():
-    """
-    Zwraca listę krotek (nazwa_techniczna, opis_czytelny) dla wszystkich interfejsów.
-    opis_czytelny: 'Wi-Fi (192.168.1.10, 00:11:22:33:44:55)'
+    """Return list of tuples (iface_name, pretty_label) for each network interface.
+
+    For Windows, uses get_windows_if_list to include description and IP;
+    for other platforms, uses Scapy to fetch address and MAC.
+
+    Returns
+    -------
+    list of (str, str)
+        Tuples of (interface name, pretty description).
     """
     result = []
     if _USE_WINDOWS_IFACES:

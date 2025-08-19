@@ -1,3 +1,4 @@
+"""SOC Tab module - coordinate background processing of events and update SOC UI."""
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QGraphicsScene, QFileDialog, QTableWidgetItem, QTabWidget, QGraphicsTextItem, QGraphicsItem, QGraphicsLineItem
 from PyQt5.QtGui import QPen, QBrush
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QObject, pyqtSlot, QLineF, QTimer
@@ -9,12 +10,25 @@ from datetime import datetime
 from modules.devices import DevicesModule
 
 class SOCWorker(QObject):
-    """Worker to process capture->features->detection in background."""
+    """Background worker for sequential event processing and multicasting signals to UI."""
     raw_event = pyqtSignal(object)
     threat = pyqtSignal(object)
     # Continuous AI score for each packet
     ai_score = pyqtSignal(object)
     def __init__(self, capture, features, detection, snort_plugins=None):
+        """Initialize SOCWorker with modules for capture, features, detection, and optional Snort plugins.
+
+        Parameters
+        ----------
+        capture : CaptureModule
+            Module for packet capture.
+        features : FeaturesModule
+            Module for feature extraction.
+        detection : DetectionModule
+            Module for threat detection.
+        snort_plugins : list of SnortRulesPlugin, optional
+            Plugins for Snort rule matching.
+        """
         super().__init__()
         self.capture = capture
         self.features = features
@@ -28,6 +42,11 @@ class SOCWorker(QObject):
 
     @pyqtSlot()
     def run(self):
+        """Main loop for capturing events, processing Snort rules, computing AI scores, and emitting signals.
+
+        Captures raw events, triggers Snort matching, feature extraction, AI scoring, and threat detection,
+        emitting raw_event, ai_score, and threat signals for the UI.
+        """
         while self.running:
             ev = self.capture.generate_event()
             if ev:
@@ -89,8 +108,9 @@ class SOCWorker(QObject):
             QThread.msleep(100)
 
 class SOCTab(QWidget):
-    """Zakładka SIEM/SOC: dashboard security logs and alerts"""
+    """User Interface tab for SOC functionality: display network map, logs, raw events, AI scores, and charts."""
     def __init__(self, parent=None):
+        """Initialize SOC tab: build UI, set up modules, start worker thread, and connect signals."""
         super().__init__(parent)
         # Inicjalizacja pól
         self._snort_plugins = []
@@ -228,6 +248,7 @@ class SOCTab(QWidget):
             canvas.draw()
 
     def _toggle_live(self):
+        '''Function _toggle_live - description.'''
         self._live = not self._live
         if self._live:
             # start live sniffing
@@ -302,6 +323,7 @@ class SOCTab(QWidget):
         return super().eventFilter(source, event)
 
     def _toggle_scheduled(self):
+        '''Function _toggle_scheduled - description.'''
         self._scheduled = not self._scheduled
         if self._scheduled:
             # schedule every 15 minutes
@@ -314,12 +336,14 @@ class SOCTab(QWidget):
             self._log('Scheduled scanning disabled')
 
     def _start_scheduled_scan(self):
+        '''Function _start_scheduled_scan - description.'''
         self._log('Starting scheduled scan')
         # delegate to capture module or scanner
         self._capture.handle_event(Event('SCAN_REQUEST', None))
 
     @pyqtSlot(object)
     def _on_worker_threat(self, event):
+        '''Function _on_worker_threat - description.'''
         # Debug: log invocation and live state
         self._log(f"_on_worker_threat called: live={self._live}, scheduled={self._scheduled}")
         # Only process if live or scheduled
@@ -341,6 +365,7 @@ class SOCTab(QWidget):
     
     @pyqtSlot(object)
     def _on_raw_event(self, ev):
+        '''Function _on_raw_event - description.'''
         # Only process if live or scheduled
         if not self._live and not self._scheduled:
             return
@@ -391,6 +416,7 @@ class SOCTab(QWidget):
             tbl.setItem(0, 3, QTableWidgetItem('RAW_PACKET'))
 
     def _add_alert(self, event):
+        '''Function _add_alert - description.'''
         # find alert table widget
         tbl = self.ctrls.get('log_table') or self.ctrls.get('alert_table')
         if tbl is None:
@@ -429,6 +455,7 @@ class SOCTab(QWidget):
         src = event.data.get('src_ip', '')
         dst = event.data.get('dst_ip', '')
         def is_black(ip_str):
+            '''Function is_black - description.'''
             try:
                 ip_obj = ipaddress.ip_address(ip_str)
                 return any(ip_obj in net for net in self._blacklist)
@@ -474,6 +501,7 @@ class SOCTab(QWidget):
                 pass
 
     def _add_device(self, event):
+        '''Function _add_device - description.'''
         # Add a node to the network map
         ip = event.data.get('ip')
         if ip in self._nodes:
@@ -663,6 +691,7 @@ class SOCTab(QWidget):
 
     @pyqtSlot(object)
     def _on_ai_score(self, event):
+        '''Function _on_ai_score - description.'''
         # Handle continuous AI scoring per packet
         if not self._live and not self._scheduled:
             return

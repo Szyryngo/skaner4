@@ -1,3 +1,4 @@
+"""Module orchestrator - main orchestrator loop, loading modules and plugins."""
 from core.events import Event
 from core.plugin_loader import load_plugins
 from core.config_manager import ConfigManager
@@ -12,11 +13,19 @@ import os
 
 
 class Orchestrator:
-    """
-	Główna pętla eventów, ładowanie i integracja modułów oraz pluginów.
-	"""
+    """Manage modules and plugins, process events, and coordinate application flow."""
 
     def __init__(self, config_dir='config', plugins_dir='plugins'):
+        """Initialize orchestrator with config and plugin directories.
+
+        Parameters
+        ----------
+        config_dir : str
+            Path to the configuration directory.
+        plugins_dir : str
+            Path to the plugin modules directory.
+        """
+        '''Function __init__ - description.'''
         self.config_dir = config_dir
         self.plugins_dir = plugins_dir
         self.modules = []
@@ -25,7 +34,10 @@ class Orchestrator:
         self.gui = None
 
     def initialize(self):
-        """Inicjalizuje wszystkie moduły i pluginy."""
+        """Load configuration and initialize all modules and plugins.
+
+        Reads YAML config files and calls initialize() on each module and plugin based on loaded settings.
+        """
         config_path = os.path.join(self.config_dir, 'config.yaml')
         plugins_config_path = os.path.join(self.config_dir,
             'plugins_config.yaml')
@@ -40,11 +52,22 @@ class Orchestrator:
             plugin.initialize(config)
 
     def set_gui(self, gui):
-        """Ustawia referencję do obiektu GUI."""
+        """Set a reference to the GUI instance for event callbacks.
+
+        Parameters
+        ----------
+        gui : object
+            GUI object implementing handle_event(event).
+        """
         self.gui = gui
 
     def run(self):
-        """Główna pętla eventów."""
+        """Start the main event loop.
+
+        Initializes modules, starts packet sniffing, and processes events in parallel.
+
+        SNORT_ALERT events are printed to console; DEVICE_DETECTED events are forwarded to the GUI when set.
+        """
         self.initialize()
         # Jeśli jest CaptureModule, rozpocznij sniffing pakietów
         for module in self.modules:

@@ -1,3 +1,4 @@
+"""Module devices_layout - description."""
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QGroupBox, QTableWidget, QAbstractItemView
 from qtui.cmd_log_widget import create_cmd_log
 
@@ -13,6 +14,7 @@ Methods
 """
 
     def build(self):
+        '''Function build - description.'''
         widget = QWidget()
         layout = QVBoxLayout()
         # Title label

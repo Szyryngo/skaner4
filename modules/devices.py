@@ -1,16 +1,27 @@
+"""Devices Module - track devices on the network and emit detection events.
+
+Listens for NEW_PACKET events, maintains active host list, and emits DEVICE_DETECTED
+when a new host appears and DEVICE_INACTIVE when a host times out."""
 from core.interfaces import ModuleBase
 from core.events import Event
 import time
 
 
 class DevicesModule(ModuleBase):
+    """Module to detect and track network devices based on captured packets.
+
+    Maintains counts and last seen timestamps for hosts and emits DEVICE_DETECTED
+    and DEVICE_INACTIVE events according to activity.
     """
-	Moduł śledzący urządzenia w sieci na podstawie pakietów ARP/IP.
-	Publikuje event DEVICE_DETECTED.
-	"""
 
     def initialize(self, config):
-        """Inicjalizuje moduł (np. parametry monitorowania)."""
+        """Initialize device tracking with configuration settings.
+
+        Parameters
+        ----------
+        config : dict
+            Configuration parameters including timeouts and thresholds.
+        """
         self.config = config
         # devices: mapping ip -> {'mac': mac, 'count': packet_count, 'last_seen': timestamp}
         self.devices = {}
@@ -20,7 +31,18 @@ class DevicesModule(ModuleBase):
         self.timeout = 300
 
     def handle_event(self, event):
-        """Obsługuje eventy NEW_PACKET do wykrywania urządzeń w sieci."""
+        """Handle NEW_PACKET events to identify and update device records.
+
+        Parameters
+        ----------
+        event : Event
+            Incoming NEW_PACKET event containing packet data to process.
+
+        Yields
+        ------
+        Event
+            DEVICE_DETECTED when a new device is seen.
+        """
         if event.type == 'NEW_PACKET':
             pkt = event.data
             src_ip = pkt.get('src_ip')
@@ -42,9 +64,16 @@ class DevicesModule(ModuleBase):
                     self.devices[src_ip] = info
 
     def generate_event(self):
+        """Generate DEVICE_INACTIVE events for hosts that have timed out.
+
+        Compares current time to last seen timestamps and yields events
+        for hosts inactive longer than the configured timeout.
+
+        Yields
+        ------
+        Event
+            DEVICE_INACTIVE for each inactive host.
         """
-		Generuje eventy DEVICE_INACTIVE dla hostów nieaktywnych powyżej timeout.
-		"""
         now = time.time()
         to_remove = [ip for ip, ts in self.active_hosts.items() if now - ts > self.timeout]
         for ip in to_remove:

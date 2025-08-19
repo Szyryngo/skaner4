@@ -1,29 +1,52 @@
+"""Features Module - aggregate packets into flows and generate traffic features.
+
+This module listens for NEW_PACKET events, aggregates packets into flows,
+and emits NEW_FEATURES events containing summarized flow statistics."""
 from core.interfaces import ModuleBase
 from core.events import Event
 
 
 class FeaturesModule(ModuleBase):
+    """Module to process packet events and generate feature events.
+
+    On receiving a NEW_PACKET event, stores packet data for flow aggregation.
+    Periodically outputs NEW_FEATURES events containing flow statistics.
     """
-	Moduł agregujący pakiety w flow i generujący cechy ruchu.
-	Odbiera NEW_PACKET, publikuje NEW_FEATURES.
-	"""
 
     def initialize(self, config):
-        """Inicjalizuje moduł (np. parametry agregacji)."""
+        """Initialize module with configuration settings.
+
+        Parameters
+        ----------
+        config : dict
+            Configuration parameters for feature computation (timeout, thresholds, etc.).
+        """
         self.config = config
         self.flows = {}
 
     def handle_event(self, event):
-        """Obsługuje event NEW_PACKET, agreguje do flow i loguje do konsoli."""
+        """Handle NEW_PACKET events by storing packet for later feature generation.
+
+        Parameters
+        ----------
+        event : Event
+            The incoming event; if type is NEW_PACKET, packet data saved.
+        """
         if event.type == 'NEW_PACKET':
             # Debug logging disabled to avoid stdout contention
             # print(f'[FeaturesModule] Otrzymano NEW_PACKET: {event.data}')
             self._last_packet = event.data
 
     def generate_event(self):
+        """Generate a NEW_FEATURES event based on stored packet data.
+
+        Constructs a basic feature set including packet count and byte totals.
+
+        Returns
+        -------
+        Event or None
+            NEW_FEATURES event with feature dict, or None if no data.
         """
-		Generuje event NEW_FEATURES na podstawie ostatniego pakietu (symulacja).
-		"""
         if hasattr(self, '_last_packet'):
             pkt = self._last_packet
             # build feature set including packet origin

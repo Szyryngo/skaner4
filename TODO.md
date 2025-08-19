@@ -12,6 +12,8 @@
 - [x] Uzupełniono dokumentację qtui/qt_dashboard.py (patrz qt_dashboard.py.docstring.txt)
 
 ## Najbliższe zadania
+- [x] Dodano panele Raw Events i AI Scores w zakładce SOC
+- [x] Uzupełniono obsługę wypełniania `raw_table` i `ai_table` w `soc_tab.py`
 - [ ] Priorytet: praca nad optymalizacją i wydajnością programu
 - [ ] Dodanie testów jednostkowych/integracyjnych dla wielowątkowości i synchroniczności
 - [ ] Monitoring metryk CPU/RAM dla poszczególnych modułów w UI

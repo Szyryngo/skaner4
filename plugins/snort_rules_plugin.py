@@ -1,3 +1,7 @@
+"""Snort Rules Plugin - detect Snort rule matches in captured packets.
+
+This plugin loads Snort rules from a .rules file, monitors for file changes,
+indexes rules for fast lookup, and emits SNORT_ALERT events when packets match rules."""
 import os
 import re
 import threading
@@ -18,11 +22,12 @@ except ImportError:
 
 
 class SnortRulesPlugin(ModuleBase):
-    """
-    Plugin dla reguł Snort: skanuje przechwycone pakiety pod kątem wzorców z pliku config/snort.rules
-    Generuje eventy SNORT_ALERT przy wykryciu zgodności.
-    """
+    """Plugin for Snort rule processing.
+
+    Loads and parses Snort rules, maintains rule states, and generates SNORT_ALERT
+    events on packet matches. Supports enabling/disabling rules and auto-reloading."""
     def __init__(self):
+        """Initialize plugin state and prepare paths for rules and persistent state."""
         super().__init__()
         self.config = {}
         self.rules = []
@@ -39,6 +44,13 @@ class SnortRulesPlugin(ModuleBase):
         self.state_file = os.path.join(config_dir, 'snort_rules_state.yaml')
 
     def initialize(self, config):
+        """Load configuration, load initial rules, restore enabled rule states, and start watchdog.
+
+        Parameters
+        ----------
+        config : dict
+            Configuration dict which may contain 'rule_file' or 'rule_files' path.
+        """
         self.config = config
         default_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'config', 'snort.rules'))
         rule_file = self.config.get('rule_file') or self.config.get('rule_files')
@@ -60,6 +72,7 @@ class SnortRulesPlugin(ModuleBase):
             pass
 
         def _watch_rules():
+            '''Function _watch_rules - description.'''
             while True:
                 try:
                     mtime = os.path.getmtime(self.rules_path)
@@ -72,6 +85,18 @@ class SnortRulesPlugin(ModuleBase):
         threading.Thread(target=_watch_rules, daemon=True).start()
 
     def handle_event(self, event):
+        """Process NEW_PACKET events, match against loaded rules, and emit SNORT_ALERTs.
+
+        Parameters
+        ----------
+        event : Event
+            Incoming event with packet data fields required for rule matching.
+
+        Returns
+        -------
+        Event or None
+            SNORT_ALERT event on match, else None.
+        """
         print(f"[DEBUG SNORT] handle_event pkt: type={event.data.get('protocol')} "
               f"src={event.data.get('src_ip')} dst={event.data.get('dst_ip')} "
               f"flags={event.data.get('tcp_flags')} itype={event.data.get('icmp_type')}", flush=True)
@@ -385,9 +410,17 @@ class SnortRulesPlugin(ModuleBase):
         return None
 
     def generate_event(self):
+        '''Function generate_event - description.'''
         return None
 
     def enable_rule(self, sid):
+        """Enable a Snort rule by its SID and persist the updated state.
+
+        Parameters
+        ----------
+        sid : str
+            Snort rule identifier (SID) to enable.
+        """
         self.enabled_sids.add(sid)
         # persist state
         try:
@@ -398,6 +431,13 @@ class SnortRulesPlugin(ModuleBase):
             pass
 
     def disable_rule(self, sid):
+        """Disable a Snort rule by its SID and persist the updated state.
+
+        Parameters
+        ----------
+        sid : str
+            Snort rule identifier (SID) to disable.
+        """
         self.enabled_sids.discard(sid)
         # persist state
         try:
@@ -408,10 +448,15 @@ class SnortRulesPlugin(ModuleBase):
             pass
 
     def reload_rules(self):
+        """Force reload of Snort rules from the rules file."""
         self._load_rules()
 
     def _load_rules(self):
-        """Wczytuje i parsuje reguły z pliku, aktualizuje self.rules i self.rules_mtime"""
+        """Load and parse Snort rules, build candidate index, and handle state changes.
+
+        Reads rules file, applies snort_parser if available, builds rule entries,
+        compiles PCRE patterns, and constructs lookup index for matching.
+        """
         try:
             mtime = os.path.getmtime(self.rules_path)
         except FileNotFoundError:
@@ -574,6 +619,7 @@ class SnortRulesPlugin(ModuleBase):
                     self.threshold_states[rule['sid']] = {'params': params, 'counters': {}}
 
     def _check_numeric_size(self, expr, size):
+        '''Function _check_numeric_size - description.'''
         # expr format: '<value>' or '><value>' or '=value'
         # support operators: >, <, =
         m = re.match(r'([<>]?)(\d+)', expr)
@@ -585,6 +631,7 @@ class SnortRulesPlugin(ModuleBase):
         return func(size, val)
 
     def _check_byte_test(self, expr, raw):
+        '''Function _check_byte_test - description.'''
         # expr format: 'size,operator,value,offset'
         parts = expr.split(',')
         if len(parts) < 4:

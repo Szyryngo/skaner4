@@ -1,3 +1,4 @@
+"""SOC Layout module - build the SIEM/SOC dashboard UI layout using PyQt5 widgets and Matplotlib."""
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QPushButton, QGraphicsView, QTableWidget, QHeaderView, QLineEdit, QLabel
 from PyQt5.QtCore import Qt
 from qtui.cmd_log_widget import create_cmd_log
@@ -5,23 +6,33 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 
 class ZoomableGraphicsView(QGraphicsView):
-    """QGraphicsView that supports zooming with the mouse wheel"""
+    """Custom QGraphicsView enabling interactive panning and zooming via mouse wheel."""
     def __init__(self, parent=None):
+        """Initialize ZoomableGraphicsView with drag and interactive mode enabled."""
         super().__init__(parent)
         self.setDragMode(QGraphicsView.ScrollHandDrag)
         self.setInteractive(True)
 
     def wheelEvent(self, event):
+        """Handle mouse wheel events to zoom in or out on the graphics view.
+
+        Zooms by a fixed factor per wheel notch.
+        """
         zoomInFactor = 1.25
         zoomOutFactor = 1 / zoomInFactor
         self.scale(zoomInFactor if event.angleDelta().y() > 0 else zoomOutFactor,
                    zoomInFactor if event.angleDelta().y() > 0 else zoomOutFactor)
 
 class SOCLayout:
-    """
-    Layout for SIEM/SOC mode: dashboard of security alerts and logs.
-    """
+    """Construct the layout for the SOC dashboard, including map, logs, tables, and chart."""
     def build(self):
+        """Build and return the main SOC UI widget and control mapping.
+
+        Returns
+        -------
+        tuple
+            The QWidget containing the layout and a dict of control widgets.
+        """
         widget = QWidget()
         main_layout = QVBoxLayout(widget)
 

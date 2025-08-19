@@ -1,3 +1,4 @@
+"""Module train_nn - description."""
 import numpy as np
 import os
 from tensorflow.keras.models import Sequential

@@ -1,3 +1,4 @@
+"""Module test_ifaces - description."""
 from modules.netif_pretty import get_interfaces_pretty
 if __name__ == '__main__':
     interfaces = get_interfaces_pretty()

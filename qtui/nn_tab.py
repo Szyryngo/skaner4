@@ -1,3 +1,4 @@
+"""Module nn_tab - description."""
 from PyQt5.QtWidgets import QWidget, QVBoxLayout
 from qtui.nn_layout import NNLayout
 from datetime import datetime
@@ -5,6 +6,7 @@ from datetime import datetime
 class NNTab(QWidget):
     """Zakładka NN: trening i ewaluacja sieci neuronowej"""
     def __init__(self, parent=None):
+        '''Function __init__ - description.'''
         super().__init__(parent)
         # Store layout instance to maintain signal connections
         self.layout_obj = NNLayout()

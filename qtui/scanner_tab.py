@@ -1,3 +1,4 @@
+"""Module scanner_tab - description."""
 from PyQt5.QtWidgets import QWidget, QVBoxLayout
 from PyQt5.QtCore import QTimer, QObject, pyqtSignal, QThread
 from qtui.scanner_layout import ScannerLayout
@@ -7,17 +8,21 @@ from datetime import datetime
 
 # Worker for asynchronous port scanning
 def _add_port_scan_worker():
+    '''Function _add_port_scan_worker - description.'''
     class PortScanWorker(QObject):
+        '''Class PortScanWorker - description.'''
         progress = pyqtSignal(int)
         log = pyqtSignal(str)
         finished = pyqtSignal(list, str)
 
         def __init__(self, target, ports_list):
+            '''Function __init__ - description.'''
             super().__init__()
             self.target = target
             self.ports_list = ports_list
 
         def run(self):
+            '''Function run - description.'''
             import socket, subprocess
             from datetime import datetime
             open_ports = []
@@ -60,16 +65,20 @@ PortScanWorker = _add_port_scan_worker()
 
 # Worker for asynchronous Discovery (ping sweep) scan
 def _add_discovery_worker():
+    '''Function _add_discovery_worker - description.'''
     class DiscoveryWorker(QObject):
+        '''Class DiscoveryWorker - description.'''
         progress = pyqtSignal(int)
         log = pyqtSignal(str)
         finished = pyqtSignal(list)
 
         def __init__(self, network):
+            '''Function __init__ - description.'''
             super().__init__()
             self.network = network
 
         def run(self):
+            '''Function run - description.'''
             import ipaddress, platform, subprocess, socket
             from datetime import datetime
             net = ipaddress.ip_network(self.network, strict=False)
@@ -114,6 +123,7 @@ DiscoveryWorker = _add_discovery_worker()
 class ScannerTab(QWidget):
     """Zakładka Scanner: ręczne skanowanie sieci"""
     def __init__(self, parent=None):
+        '''Function __init__ - description.'''
         super().__init__(parent)
         # Build UI
         widget, ctrls = ScannerLayout().build()
@@ -142,6 +152,7 @@ class ScannerTab(QWidget):
         self._scan_worker = None
 
     def _on_start_scan(self):
+        '''Function _on_start_scan - description.'''
         scan_type = self.ctrls['scan_type_combo'].currentText()
         target = self.ctrls['target_input'].text()
         subtype = self.ctrls['port_mode_combo'].currentText()
@@ -245,6 +256,7 @@ class ScannerTab(QWidget):
         self.ctrls['cmd_log'].append(f"[{now}] Discovery zakończony: {len(results)} hostów")
 
     def _process_scan_result(self):
+        '''Function _process_scan_result - description.'''
         ev = self._scanner_module.generate_event()
         if ev and ev.type == 'SCAN_COMPLETED':
             results = getattr(self._scanner_module, '_scan_result', [])
@@ -270,10 +282,12 @@ class ScannerTab(QWidget):
                 )
 
     def _on_preview_ports(self):
+        '''Function _on_preview_ports - description.'''
         # Placeholder for preview ports action
         pass
 
     def _on_save(self):
+        '''Function _on_save - description.'''
         # Placeholder for save action
         pass
 

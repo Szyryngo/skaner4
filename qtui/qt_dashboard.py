@@ -1,3 +1,4 @@
+"""Module qt_dashboard - description."""
 from modules.features import FeaturesModule
 from scapy.all import Ether
 from modules.detection import DetectionModule
@@ -37,6 +38,7 @@ Methods
 """
 
     def __init__(self, pkt_id, hex_data, ascii_data, parent=None):
+        '''Function __init__ - description.'''
         super().__init__(parent)
         self.setWindowTitle(f'Szczegóły pakietu ID {pkt_id}')
         layout = QVBoxLayout()
@@ -67,12 +69,14 @@ Methods
 """
 
     def log_status(self, msg):
+        '''Function log_status - description.'''
         from datetime import datetime
         ts = datetime.now().strftime('%H:%M:%S')
         self.status_log.append(
             f'<span style="color:#8bc34a;">[{ts}]</span> {msg}')
 
     def __init__(self):
+        '''Function __init__ - description.'''
         super().__init__()
         from PyQt5 import uic
         # Load UI from file relative to this script
@@ -232,6 +236,7 @@ Methods
             self.log_status(f'{pretty}: {count} pakietów')
 
     def _on_interface_changed(self, idx):
+        '''Function _on_interface_changed - description.'''
         iface = self.interface_combo.itemData(idx)
         if hasattr(self, '_capture') and self._capture:
             try:
@@ -247,6 +252,7 @@ Methods
                     m.set_interface(iface)
 
     def _on_filter_combo_changed(self, idx):
+        '''Function _on_filter_combo_changed - description.'''
         if idx == 0:
             self.filter_combo.lineEdit().setText('')
             self._set_bpf_filter('')
@@ -255,10 +261,12 @@ Methods
             self._set_bpf_filter(bpf)
 
     def _on_filter_edit_changed(self):
+        '''Function _on_filter_edit_changed - description.'''
         bpf = self.filter_combo.lineEdit().text().strip()
         self._set_bpf_filter(bpf)
 
     def _on_set_filter(self):
+        '''Function _on_set_filter - description.'''
         if not self._sniffing:
             self._on_start_sniffing()
         bpf = self.filter_combo.currentText().strip() or self.filter_combo.lineEdit().text().strip()
@@ -384,6 +392,7 @@ Methods
             self.log_status(f"Nie można otworzyć okna szczegółów pakietu: {e}")
 
     def _set_bpf_filter(self, bpf):
+        '''Function _set_bpf_filter - description.'''
         if not bpf or bpf.strip().lower().startswith('nie filtruj'):
             bpf = ''
         import yaml
@@ -405,6 +414,7 @@ Methods
                     self._capture.start_sniffing()
 
     def _init_db(self):
+        '''Function _init_db - description.'''
         self._conn = sqlite3.connect(self._db_path)
         c = self._conn.cursor()
         c.execute(
@@ -423,6 +433,7 @@ Methods
         self._conn.commit()
 
     def _save_packet_to_db(self, pkt_id, czas, src, dst, proto, size,
+        '''Function _save_packet_to_db - description.'''
         ai_weight, geo):
         c = self._conn.cursor()
         c.execute(
@@ -431,6 +442,7 @@ Methods
         self._conn.commit()
 
     def _load_recent_packets(self, limit=300, offset=0):
+        '''Function _load_recent_packets - description.'''
         self._db_offset = 0
         c = self._conn.cursor()
         c.execute(
@@ -443,6 +455,7 @@ Methods
         self._db_offset = len(rows)
 
     def _load_more_packets(self, limit=300):
+        '''Function _load_more_packets - description.'''
         c = self._conn.cursor()
         c.execute(
             'SELECT pkt_id, czas, src, dst, proto, size, ai_weight, geo FROM packets ORDER BY id DESC LIMIT ? OFFSET ?'
@@ -453,6 +466,7 @@ Methods
         self._db_offset += len(rows)
 
     def _add_packet_from_db(self, pkt_id, czas, src, dst, proto, size,
+        '''Function _add_packet_from_db - description.'''
         ai_weight, geo):
         row = self.packets.rowCount()
         self.packets.insertRow(row)
@@ -481,6 +495,7 @@ Methods
             pass
 
     def _process_new_packets(self):
+        '''Function _process_new_packets - description.'''
         # Skip if not active
         if not self._sniffing or self._paused:
             return
@@ -642,6 +657,7 @@ Methods
 class MainWindow(QMainWindow):
     """Główne okno aplikacji z zakładkami"""
     def __init__(self):
+        '''Function __init__ - description.'''
         super().__init__()
         self.setWindowTitle('AI Network Packet Analyzer Pro')
         # tab widget

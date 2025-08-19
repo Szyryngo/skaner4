@@ -1,3 +1,4 @@
+"""Module info_tab - description."""
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QTableWidget, QTableWidgetItem
 from PyQt5.QtCore import QObject, QThread, pyqtSignal
 import psutil
@@ -5,8 +6,10 @@ import platform
 
 # Worker to fetch hardware info
 class InfoWorker(QObject):
+    '''Class InfoWorker - description.'''
     finished = pyqtSignal(list)
     def run(self):
+        '''Function run - description.'''
         rows = []
         # CPU info
         try:
@@ -69,6 +72,7 @@ class InfoWorker(QObject):
 class InfoTab(QWidget):
     """Zakładka z informacjami o podzespołach komputera"""
     def __init__(self, parent=None):
+        '''Function __init__ - description.'''
         super().__init__(parent)
         layout = QVBoxLayout(self)
         self.table = QTableWidget(0, 2)
@@ -84,6 +88,7 @@ class InfoTab(QWidget):
         self._thread.start()
 
     def _on_info_ready(self, rows):
+        '''Function _on_info_ready - description.'''
         self.table.setRowCount(len(rows))
         for i, (param, val) in enumerate(rows):
             self.table.setItem(i, 0, QTableWidgetItem(param))

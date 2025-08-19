@@ -1,3 +1,4 @@
+"""Module config_layout - description."""
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QGroupBox, QHBoxLayout,
     QComboBox, QPushButton, QLineEdit, QApplication
@@ -12,6 +13,7 @@ class ConfigLayout:
     """
 
     def build(self):
+        '''Function build - description.'''
         widget = QWidget()
         layout = QVBoxLayout()
 

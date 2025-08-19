@@ -1,3 +1,4 @@
+"""MainWindow module - define the primary Qt window with tabs and system metrics toolbar."""
 import sys
 VERSION = '1.5.10 stable'
 import psutil
@@ -13,8 +14,14 @@ from .snort_rules_tab import SnortRulesTab
 from .info_tab import InfoTab
 
 class MainWindow(QMainWindow):
-    """Główne okno aplikacji z zakładkami"""
+    """Primary application window containing all feature tabs and system metrics toolbar."""
     def __init__(self):
+        """Initialize main window: set up tabs, metrics toolbar, and signal connections.
+
+        Creates QTabWidget with Dashboard, Devices, Scanner, SOC, NN, Config, Snort Rules, and Info tabs.
+        Configures a toolbar to display CPU, per-core, RAM, threads, and cores metrics updated every second.
+        Ensures SOC background threads are cleaned up on application exit.
+        """
         super().__init__()
         # Set fixed application version
         self.setWindowTitle(f'AI Network Packet Analyzer Pro v{VERSION}')
@@ -96,6 +103,10 @@ class MainWindow(QMainWindow):
         qApp.aboutToQuit.connect(self._cleanup)
 
     def _update_metrics(self):
+        """Refresh system performance metrics in the toolbar.
+
+        Updates overall CPU, per-core usage, RAM percentage, and thread/core counts every second.
+        """
         # CPU usage
         cpu = psutil.cpu_percent()
         self._cpu_label.setText(f"CPU: {cpu}%")

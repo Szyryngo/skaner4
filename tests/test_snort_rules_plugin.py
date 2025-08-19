@@ -1,3 +1,4 @@
+"""Unit tests for SnortRulesPlugin covering rule loading, custom configs, and packet matching."""
 import os
 import sys
 import time
@@ -8,7 +9,9 @@ from plugins.snort_rules_plugin import SnortRulesPlugin
 from core.events import Event
 
 class TestSnortRulesPlugin(unittest.TestCase):
+    """Test suite for verifying SnortRulesPlugin loads rules and emits SNORT_ALERT appropriately."""
     def setUp(self):
+        """Prepare a SnortRulesPlugin instance and load test rule files before each test."""
         # Przygotuj plik z regułami testowymi
         self.plugin = SnortRulesPlugin()
         # tymczasowy plik z regułami
@@ -23,6 +26,7 @@ class TestSnortRulesPlugin(unittest.TestCase):
         self.plugin._load_rules()
 
     def test_icmp_ping_detection(self):
+        """Verify that an ICMP echo request packet triggers a SNORT_ALERT with the correct SID and message."""
         # symulacja pakietu ICMP typu 8 (ping)
         data = {'protocol':'icmp', 'src_ip':'10.0.0.1', 'dst_ip':'10.0.0.2', 'icmp_type':8, 'raw_bytes': b''}
         ev = self.plugin.handle_event(Event('NEW_PACKET', data))
@@ -31,6 +35,7 @@ class TestSnortRulesPlugin(unittest.TestCase):
         self.assertIn('Ping test', ev.data.get('msg', ''))
 
     def test_threshold_syn_detection(self):
+        """Test SYN flood threshold rule: only after count threshold is met should SNORT_ALERT be emitted."""
         # pierwsze wywołanie nie powinno wyzwolić alertu
         data = {'protocol':'tcp', 'src_ip':'10.0.0.1', 'dst_ip':'10.0.0.2', 'src_port':1234, 'dst_port':80, 'tcp_flags':'S', 'raw_bytes': b''}
         ev1 = self.plugin.handle_event(Event('NEW_PACKET', data))
@@ -42,6 +47,7 @@ class TestSnortRulesPlugin(unittest.TestCase):
         self.assertEqual(ev2.data.get('sid'), '1001')
     
     def test_custom_rule_file_config(self):
+        """Check that SnortRulesPlugin uses a custom rule file specified in configuration."""
         # przygotuj niestandardowy plik reguł i nadpisanie w config
         custom_rules = os.path.abspath(os.path.join(os.path.dirname(__file__), 'custom.rules'))
         with open(custom_rules, 'w', encoding='utf-8') as f:
@@ -57,6 +63,7 @@ class TestSnortRulesPlugin(unittest.TestCase):
         self.assertIn('Custom ping', ev.data.get('msg', ''))
 
     def test_scapy_icmp_packet(self):
+        """Use a Scapy-crafted ICMP packet to confirm detection logic works with raw packet data."""
         # Test ICMP detection using scapy-crafted packet
         from scapy.all import IP, ICMP, raw
         pkt = IP(src='10.0.0.3', dst='10.0.0.4')/ICMP(type=8)

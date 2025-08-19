@@ -1,3 +1,9 @@
+"""Main entry point for the Skaner4 application.
+
+This module initializes the application configuration and
+launches the appropriate interface (Qt GUI or CLI)
+based on the user's configuration.
+"""
 import sys
 import yaml
 from core.orchestrator import Orchestrator
@@ -5,13 +11,16 @@ from core.orchestrator import Orchestrator
 
 def run_qt_gui():
     """
-Parameters
-----------
+    Launch the Qt-based GUI application.
 
-Returns
--------
+    This function creates a QApplication instance, initializes
+    the main window, and starts the Qt event loop.
 
-"""
+    Raises
+    ------
+    SystemExit
+        If the application cannot be initialized or an error occurs.
+    """
     # Initialize and run the Qt GUI, catching any exceptions during setup or execution
     try:
         from qtui.main_window import MainWindow

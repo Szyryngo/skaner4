@@ -1,3 +1,4 @@
+"""Module cmd_log_widget - description."""
 from PyQt5.QtWidgets import QTextEdit
 from datetime import datetime
 

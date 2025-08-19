@@ -1,22 +1,39 @@
+"""Scanner Module - perform network scans on demand and report results.
+
+This module executes ping sweeps and port scans on the configured subnet,
+and emits SCAN_COMPLETED events with discovery details."""
 from core.interfaces import ModuleBase
 from core.events import Event
 
 
 class ScannerModule(ModuleBase):
+    """CLI-driven network scanner module for active scanning tasks.
+
+    Initiates ping sweeps and TCP port scans based on UI commands,
+    then emits SCAN_COMPLETED events with scan results.
     """
-	Moduł do ręcznego skanowania sieci (light/stealth i full scan).
-	Publikuje event SCAN_COMPLETED.
-	"""
 
     def initialize(self, config):
-        """Inicjalizuje moduł (np. parametry skanowania)."""
+        """Initialize scanner module with configuration settings.
+
+        Parameters
+        ----------
+        config : dict
+            Configuration including default scan parameters and network settings.
+        """
         self.config = config
         self._scan_requested = False
         self._scan_result = None
         self.ports = []
 
     def handle_event(self, event):
-        """Obsługuje eventy (np. polecenia z UI)."""
+        """Handle SCAN_REQUEST events to trigger a network scan.
+
+        Parameters
+        ----------
+        event : Event
+            Should have type 'SCAN_REQUEST' and optional data with 'ports' and 'subtype'.
+        """
         if event.type == 'SCAN_REQUEST':
             self._scan_requested = True
             # Save ports and subtype for scan
@@ -25,9 +42,16 @@ class ScannerModule(ModuleBase):
             self.subtype = data.get('subtype')
 
     def generate_event(self):
+        """Perform the network scan and generate SCAN_COMPLETED event with results.
+
+        Executes a ping sweep across the /24 subnet, port scans for requested ports,
+        and ARP lookups for MAC addresses.
+
+        Returns
+        -------
+        Event or None
+            SCAN_COMPLETED event containing 'result' list, or None if no scan requested.
         """
-		Generuje event SCAN_COMPLETED po zakończeniu skanowania (ping sweep na podsieci 192.168.0.0/24).
-		"""
         if self._scan_requested:
             self._scan_requested = False
             import platform, subprocess, socket

@@ -1,3 +1,4 @@
+"""Module scanner_layout - description."""
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QFormLayout,
     QLabel, QLineEdit, QComboBox, QPushButton, QTableWidget,
@@ -10,6 +11,7 @@ class ScannerLayout:
     """UI builder for the Scanner tab."""
 
     def build(self):
+        '''Function build - description.'''
         widget = QWidget()
         main_layout = QVBoxLayout(widget)
         split_layout = QHBoxLayout()

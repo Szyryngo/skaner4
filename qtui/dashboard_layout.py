@@ -1,3 +1,4 @@
+"""Module dashboard_layout - description."""
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QComboBox, QPushButton, QTextEdit, QTableWidget, QLabel, QSplitter, QGroupBox
 
 
@@ -12,6 +13,7 @@ Methods
 """
 
     def build(self):
+        '''Function build - description.'''
         widget = QWidget()
         main_layout = QVBoxLayout()
         top_row = QHBoxLayout()

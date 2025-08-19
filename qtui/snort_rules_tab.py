@@ -1,10 +1,15 @@
+"""UI Tab for Snort Rules - display and manage Snort rule states via table."""
 import os
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QTableWidget, QTableWidgetItem, QCheckBox, QLabel
 from PyQt5.QtGui import QFont
 
 class SnortRulesTab(QWidget):
-    """Tab displaying the contents of the Snort rules file."""
+    """Snort Rules management tab.
+
+    Displays a list of loaded Snort rules with checkboxes to enable or disable each rule.
+    """
     def __init__(self, plugins, parent=None):
+        """Initialize the tab: locate SnortRulesPlugin, build rule table, and set up callbacks."""
         super().__init__(parent)
         # Find the SnortRulesPlugin instance
         from plugins.snort_rules_plugin import SnortRulesPlugin

@@ -8,11 +8,14 @@ import os
 import sys
 
 def add_docstrings_to_file(filepath, dry_run=False):
+    '''Function add_docstrings_to_file - description.'''
     with open(filepath, 'r', encoding='utf-8') as f:
         source = f.read()
     tree = ast.parse(source)
     class DocInserter(ast.NodeTransformer):
+        '''Class DocInserter - description.'''
         def visit_FunctionDef(self, node):
+            '''Function visit_FunctionDef - description.'''
             # skip if has docstring
             if not ast.get_docstring(node):
                 doc = ast.Expr(value=ast.Constant(value="""
@@ -26,6 +29,7 @@ Returns
                 node.body.insert(0, doc)
             return node
         def visit_ClassDef(self, node):
+            '''Function visit_ClassDef - description.'''
             if not ast.get_docstring(node):
                 doc = ast.Expr(value=ast.Constant(value="""
 Attributes
@@ -49,6 +53,7 @@ Methods
             f.write(new_source)
 
 def main():
+    '''Function main - description.'''
     dry = '--dry-run' in sys.argv
     root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
     for subdir, dirs, files in os.walk(root):

@@ -1,3 +1,4 @@
+"""Module devices_tab - description."""
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QTableWidgetItem  
 from PyQt5.QtCore import QTimer  
 from modules.capture import CaptureModule  
@@ -13,6 +14,7 @@ from qtui.devices_layout import DevicesLayout
 class DevicesTab(QWidget):
     """Zakładka Devices: lista żywych urządzeń"""
     def __init__(self, parent=None):
+        '''Function __init__ - description.'''
         super().__init__(parent)
         widget, ctrls = DevicesLayout().build()
         # Osadź zbudowany widget wewnątrz tej zakładki

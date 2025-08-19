@@ -1,3 +1,4 @@
+"""Module config_tab - description."""
 from PyQt5.QtWidgets import QWidget, QVBoxLayout
 from qtui.config_layout import ConfigLayout
 from datetime import datetime
@@ -5,6 +6,7 @@ from datetime import datetime
 class ConfigTab(QWidget):
     """Zakładka Config: ustawienia okna i AI"""
     def __init__(self, parent=None):
+        '''Function __init__ - description.'''
         super().__init__(parent)
         # Zbuduj i osadź layout
         widget, ctrls = ConfigLayout().build()
