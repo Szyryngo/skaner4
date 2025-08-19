@@ -7,6 +7,8 @@ import sys
 from PyQt5.QtWidgets import QApplication, QMainWindow, QTabWidget, QWidget, QVBoxLayout, QLabel, QPushButton, QListWidget, QGroupBox, QTableWidget, QTableWidgetItem, QAbstractItemView, QSplitter, QTextEdit, QHBoxLayout, QDialog, QComboBox
 import threading
 import yaml
+import numpy as _np
+from datetime import datetime
 from core.config_manager import ConfigManager
 from qtui.dashboard_layout import DashboardLayout
 from qtui.config_layout import ConfigLayout
@@ -75,152 +77,32 @@ Methods
         self.status_log.append(
             f'<span style="color:#8bc34a;">[{ts}]</span> {msg}')
 
-    def __init__(self):
-        '''Function __init__ - description.'''
-        super().__init__()
-        from PyQt5 import uic
-        # Load UI from file relative to this script
-        import os
-        ui_path = os.path.join(os.path.dirname(__file__), 'dashboard.ui')
-        uic.loadUi(ui_path, self)
-        from PyQt5.QtWidgets import QComboBox, QPushButton, QTableWidget, QTextEdit
-        self.interface_combo = self.findChild(QComboBox, 'interface_combo')
-        self.filter_combo = self.findChild(QComboBox, 'filter_combo')
-        self.start_btn = self.findChild(QPushButton, 'start_btn')
-        self.pause_btn = self.findChild(QPushButton, 'pause_btn')
-        self.stop_btn = self.findChild(QPushButton, 'stop_btn')
-        self.test_btn = self.findChild(QPushButton, 'test_btn')
-        self.packets = self.findChild(QTableWidget, 'packets_table')
-        self.detail_info = self.findChild(QTextEdit, 'detail_info')
-        self.hex_view = self.findChild(QTextEdit, 'hex_view')
-        self.ascii_view = self.findChild(QTextEdit, 'ascii_view')
-        self.status_log = self.findChild(QTextEdit, 'status_log')
-        from modules.netif_pretty import get_interfaces_pretty
-        self._iface_map = get_interfaces_pretty()
-        self.interface_combo.clear()
-        for iface, pretty in self._iface_map:
-            self.interface_combo.addItem(pretty, iface)
-        self.interface_combo.currentIndexChanged.connect(self.
-            _on_interface_changed)
-        self.filter_combo.clear()
-        self.filter_combo.setEditable(True)
-        self.filter_combo.setMinimumWidth(180)
-        self.filter_combo.addItem('Nie filtruj')
-        self.filter_combo.addItems(['tcp', 'udp', 'icmp', 'port 80',
-            'port 443', 'host 8.8.8.8'])
-        self.filter_combo.currentIndexChanged.connect(self.
-            _on_filter_combo_changed)
-        self.filter_combo.lineEdit().editingFinished.connect(self.
-            _on_filter_edit_changed)
-        try:
-            self.set_filter_btn = self.findChild(QPushButton, 'set_filter_btn')
-            if self.set_filter_btn:
-                self.set_filter_btn.clicked.connect(self._on_set_filter)
-        except Exception:
-            pass
-        self.test_btn.clicked.connect(self._on_test_interfaces)
-        self.start_btn.clicked.connect(self._on_start_sniffing)
-        self.pause_btn.clicked.connect(self._on_pause_sniffing)
-        self.stop_btn.clicked.connect(self._on_stop_sniffing)
-        self.export_csv_btn = self.findChild(QPushButton, 'export_csv_btn')
-        self.export_pcap_btn = self.findChild(QPushButton, 'export_pcap_btn')
-        if self.export_csv_btn:
-            self.export_csv_btn.clicked.connect(self._on_export_csv)
-        if self.export_pcap_btn:
-            self.export_pcap_btn.clicked.connect(self._on_export_pcap)
-        self.packets.setColumnCount(8)
-        self.packets.setHorizontalHeaderLabels(['ID', 'Czas', 'Źródło',
-            'Cel', 'Protokół', 'Rozmiar (B)', 'Waga AI', 'Geolokalizacja'])
-        from PyQt5.QtWidgets import QAbstractItemView
-        self.packets.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.packets.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.packets.verticalHeader().setVisible(False)
-        self.packets.setAlternatingRowColors(True)
-        self.packets.setStyleSheet(
-            'QTableWidget {selection-background-color: #2196F3;}')
-        self.packets.cellClicked.connect(self._show_packet_details_inline)
-        # Double-click to open detailed dialog
-        self.packets.cellDoubleClicked.connect(self._show_packet_detail_dialog)
-        self.detail_info.setPlaceholderText(
-            'Wybierz pakiet, aby zobaczyć szczegóły...')
-        self.status_log.setStyleSheet(
-            'background: #222; color: #fff; font-family: Consolas, monospace; '
-            'font-size: 12px; border-radius: 6px; padding: 4px;'
-        )
-        # Inicjalizacja modułu przechwytywania pakietów
-        from modules.capture import CaptureModule
-        self._capture = CaptureModule()
-        self._capture.initialize({})
-        # Load protocol mapping from config/protocols.yaml
-        import yaml, os
-        proto_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'config', 'protocols.yaml'))
-        try:
-            with open(proto_path, 'r', encoding='utf-8') as f:
-                data = yaml.safe_load(f) or {}
-            # Build mapping only for numeric keys, skip ranges or invalid entries
-            mapping = {}
-            for key, name in data.items():
-                # Add mapping for integer keys and their string equivalents
-                if isinstance(key, int):
-                    mapping[key] = name
-                    mapping[str(key)] = name
-                elif isinstance(key, str) and key.isdigit():
-                    num = int(key)
-                    mapping[num] = name
-                    mapping[key] = name
-            self.protocols = mapping
-        except Exception:
-            self.protocols = {}
-        # Initialize AI pipeline modules
-        from modules.features import FeaturesModule
-        self._features_module = FeaturesModule()
-        self._features_module.initialize({})
-        from modules.detection import DetectionModule
-        self._detection_module = DetectionModule()
-        self._detection_module.initialize({})
-        # Inicjalizacja danych pakietów
-        self._packet_data = []
-        self._packet_metas = []  # metadane do eksportu i podglądu
-        self._db_path = 'packets.db'
-        self._init_db()
-        # Flagi stanu
-        self._sniffing = False
-        self._paused = False
-        self._orchestrator = None
-        self._packet_counter = 0
-        # Executor for AI pipeline offloading
-        self._executor = ThreadPoolExecutor(max_workers=2)
-        self._futures = []  # pending processing futures
-        # Timer do przetwarzania zdarzeń pakietowych
-        from PyQt5.QtCore import QTimer
-        self._event_timer = QTimer(self)
-        self._event_timer.timeout.connect(self._process_new_packets)
-        self._event_timer.start(100)
-        # Wczytanie ustawień aplikacji
-        import yaml, os
-        cfg_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'config', 'config.yaml'))
-        try:
-            with open(cfg_path, 'r', encoding='utf-8') as f:
-                cfg = yaml.safe_load(f) or {}
-        except:
-            cfg = {}
-        bpf = cfg.get('filter', '')
-        if bpf:
-            self.filter_combo.lineEdit().setText(bpf)
-        self._capture.config['filter'] = bpf
-        iface = cfg.get('network_interface', None)
-        if iface:
-            idx = [i for i, (ifn, _) in enumerate(self._iface_map) if ifn == iface]
-            if idx:
-                self.interface_combo.setCurrentIndex(idx[0])
-        # Automatyczne rozpoczęcie przechwytywania
-        self._on_start_sniffing()
-
-        # Limit number of displayed rows to avoid excessive repaint
-        self._max_display_rows = 100
-    # Executor for DB writes (używa module-level importu ThreadPoolExecutor)
-        self._db_executor = ThreadPoolExecutor(max_workers=1)
-
+    def _on_interface_changed(self, idx):
+        '''Obsługuje zmianę interfejsu sieciowego w GUI.'''
+        iface = self.interface_combo.itemData(idx)
+        if hasattr(self, '_capture') and self._capture:
+            try:
+                self._capture.set_interface(iface)
+                self.log_status(f'Ustawiono interfejs: {iface}')
+            except Exception as e:
+                self.log_status(f'Błąd ustawiania interfejsu: {e}')
+        main_window = self.parentWidget().parentWidget() if hasattr(self, 'parentWidget') else None
+        if main_window and hasattr(main_window, '_orchestrator'):
+            for m in main_window._orchestrator.modules:
+                if m.__class__.__name__ == 'DevicesSnifferModule':
+                    m.set_interface(iface)
+    def _on_filter_combo_changed(self, idx):
+        '''Obsługa zmiany wyboru filtra w liście rozwijanej.'''
+        if idx == 0:
+            self.filter_combo.lineEdit().setText('')
+            self._set_bpf_filter('')
+        else:
+            bpf = self.filter_combo.currentText().strip()
+            self._set_bpf_filter(bpf)
+    def _on_filter_edit_changed(self):
+        '''Obsługa ręcznej edycji filtra w polu tekstowym.'''
+        bpf = self.filter_combo.lineEdit().text().strip()
+        self._set_bpf_filter(bpf)
     def _on_test_interfaces(self):
         """Testuj przechwytywanie na wszystkich interfejsach i wyświetl wyniki."""
         from scapy.all import sniff
@@ -234,50 +116,169 @@ Methods
             except Exception as e:
                 count = f'Błąd: {e}'
             self.log_status(f'{pretty}: {count} pakietów')
+    def __init__(self):
+        '''Function __init__ - description.'''
+        super().__init__()
+        from PyQt5 import uic
+        # Load UI from file relative to this script
+        import os
+        ui_path = os.path.join(os.path.dirname(__file__), 'dashboard.ui')
+        uic.loadUi(ui_path, self)
+        # Inicjalizacja modułu przechwytywania pakietów
+        from modules.capture import CaptureModule
+        self._capture = CaptureModule()
+        self._capture.initialize({})
+        self._capture_initialized = False
+        # Konfiguracja widgetów i połączeń sygnałów
+        from PyQt5.QtWidgets import QComboBox, QPushButton, QTableWidget, QTextEdit, QAbstractItemView
+        self.interface_combo = self.findChild(QComboBox, 'interface_combo')
+        self.filter_combo = self.findChild(QComboBox, 'filter_combo')
+        self.start_btn = self.findChild(QPushButton, 'start_btn')
+        self.pause_btn = self.findChild(QPushButton, 'pause_btn')
+        self.stop_btn = self.findChild(QPushButton, 'stop_btn')
+        self.test_btn = self.findChild(QPushButton, 'test_btn')
+        self.export_csv_btn = self.findChild(QPushButton, 'export_csv_btn')
+        self.export_pcap_btn = self.findChild(QPushButton, 'export_pcap_btn')
+        self.packets = self.findChild(QTableWidget, 'packets_table')
+        self.detail_info = self.findChild(QTextEdit, 'detail_info')
+        self.hex_view = self.findChild(QTextEdit, 'hex_view')
+        self.ascii_view = self.findChild(QTextEdit, 'ascii_view')
+        self.status_log = self.findChild(QTextEdit, 'status_log')
+        # Interfejsy sieciowe
+        from modules.netif_pretty import get_interfaces_pretty
+        self._iface_map = get_interfaces_pretty()
+        self.interface_combo.clear()
+        for iface, pretty in self._iface_map:
+            self.interface_combo.addItem(pretty, iface)
+        self.interface_combo.currentIndexChanged.connect(self._on_interface_changed)
 
-    def _on_interface_changed(self, idx):
-        '''Function _on_interface_changed - description.'''
-        iface = self.interface_combo.itemData(idx)
-        if hasattr(self, '_capture') and self._capture:
+        self.filter_combo.clear()
+        self.filter_combo.setEditable(True)
+        self.filter_combo.setMinimumWidth(180)
+        self.filter_combo.addItem('Nie filtruj')
+        self.filter_combo.addItems(['tcp', 'udp', 'icmp', 'port 80', 'port 443', 'host 8.8.8.8'])
+        self.filter_combo.currentIndexChanged.connect(self._on_filter_combo_changed)
+        self.filter_combo.lineEdit().editingFinished.connect(self._on_filter_edit_changed)
+        try:
+            self.set_filter_btn = self.findChild(QPushButton, 'set_filter_btn')
+            if self.set_filter_btn:
+                self.set_filter_btn.clicked.connect(self._on_set_filter)
+        except Exception:
+            pass
+
+        self.test_btn.clicked.connect(self._on_test_interfaces)
+        self.start_btn.clicked.connect(self._on_start_sniffing)
+        self.pause_btn.clicked.connect(self._on_pause_sniffing)
+        self.stop_btn.clicked.connect(self._on_stop_sniffing)
+        if self.export_csv_btn:
+            self.export_csv_btn.clicked.connect(self._on_export_csv)
+        if self.export_pcap_btn:
+            self.export_pcap_btn.clicked.connect(self._on_export_pcap)
+
+        self.packets.setColumnCount(8)
+        self.packets.setHorizontalHeaderLabels(['ID', 'Czas', 'Źródło', 'Cel', 'Protokół', 'Rozmiar (B)', 'Waga AI', 'Geolokalizacja'])
+        self.packets.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.packets.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.packets.verticalHeader().setVisible(False)
+        self.packets.setAlternatingRowColors(True)
+        self.packets.setStyleSheet('QTableWidget {selection-background-color: #2196F3;}')
+        self.packets.cellClicked.connect(self._show_packet_details_inline)
+        self.packets.cellDoubleClicked.connect(self._show_packet_detail_dialog)
+
+        self.detail_info.setPlaceholderText('Wybierz pakiet, aby zobaczyć szczegóły...')
+        self.hex_view.setReadOnly(True)
+        self.ascii_view.setReadOnly(True)
+        self.status_log.setStyleSheet('background: #222; color: #fff; font-family: Consolas, monospace; font-size: 12px; border-radius: 6px; padding: 4px;')
+
+        import yaml
+        proto_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'config', 'protocols.yaml'))
+        try:
+            with open(proto_path, 'r', encoding='utf-8') as f:
+                data = yaml.safe_load(f) or {}
+            mapping = {}
+            for key, name in data.items():
+                if isinstance(key, int):
+                    mapping[key] = name
+                    mapping[str(key)] = name
+                elif isinstance(key, str) and key.isdigit():
+                    mapping[int(key)] = name
+                    mapping[key] = name
+            self.protocols = mapping
+        except Exception:
+            self.protocols = {}
+
+        from modules.features import FeaturesModule
+        self._features_module = FeaturesModule()
+        self._features_module.initialize({})
+        from modules.detection import DetectionModule
+        self._detection_module = DetectionModule()
+        self._detection_module.initialize({})
+
+        self._packet_data = []
+        self._packet_metas = []
+        self._db_path = 'packets.db'
+        self._init_db()
+
+        self._sniffing = False
+        self._paused = False
+        self._orchestrator = None
+        self._packet_counter = 0
+
+        from concurrent.futures import ThreadPoolExecutor
+        self._executor = ThreadPoolExecutor(max_workers=2)
+        self._db_executor = ThreadPoolExecutor(max_workers=1)
+        self._futures = []
+
+        from PyQt5.QtCore import QTimer
+        self._event_timer = QTimer(self)
+        self._event_timer.timeout.connect(self._process_new_packets)
+        self._event_timer.start(1000)
+
+        cfg_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'config', 'config.yaml'))
+        try:
+            with open(cfg_path, 'r', encoding='utf-8') as f:
+                cfg = yaml.safe_load(f) or {}
+        except Exception:
+            cfg = {}
+        bpf = cfg.get('filter', '')
+        if bpf:
+            self.filter_combo.lineEdit().setText(bpf)
             try:
-                self._capture.set_interface(iface)
-                self.log_status(f'Ustawiono interfejs: {iface}')
-            except Exception as e:
-                self.log_status(f'Błąd ustawiania interfejsu: {e}')
-        main_window = self.parentWidget().parentWidget() if hasattr(self,
-            'parentWidget') else None
-        if main_window and hasattr(main_window, '_orchestrator'):
-            for m in main_window._orchestrator.modules:
-                if m.__class__.__name__ == 'DevicesSnifferModule':
-                    m.set_interface(iface)
+                self._capture.config['filter'] = bpf
+            except Exception:
+                pass
+        iface = cfg.get('network_interface', None)
+        if iface:
+            idx = [i for i, (ifn, _) in enumerate(self._iface_map) if ifn == iface]
+            if idx:
+                self.interface_combo.setCurrentIndex(idx[0])
 
-    def _on_filter_combo_changed(self, idx):
-        '''Function _on_filter_combo_changed - description.'''
-        if idx == 0:
-            self.filter_combo.lineEdit().setText('')
-            self._set_bpf_filter('')
-        else:
-            bpf = self.filter_combo.currentText().strip()
-            self._set_bpf_filter(bpf)
-
-    def _on_filter_edit_changed(self):
-        '''Function _on_filter_edit_changed - description.'''
-        bpf = self.filter_combo.lineEdit().text().strip()
-        self._set_bpf_filter(bpf)
-
-    def _on_set_filter(self):
-        '''Function _on_set_filter - description.'''
-        if not self._sniffing:
+        # Flagi stanu
+        self._max_display_rows = 100
+        self._max_events_per_cycle = 50
+        # Auto-start packet capture on initialization
+        try:
             self._on_start_sniffing()
-        bpf = self.filter_combo.currentText().strip() or self.filter_combo.lineEdit().text().strip()
-        self._set_bpf_filter(bpf)
-        self.packets.setRowCount(0)
-        self.log_status(f'Ustawiono filtr: {bpf}')
-    
+        except Exception as e:
+            self.log_status(f'Błąd uruchamiania przechwytywania: {e}')
+
     def _on_start_sniffing(self):
         """Rozpocznij przechwytywanie pakietów"""
+        # Only start once to avoid duplicate logs
+        if self._sniffing:
+            return
         self._sniffing = True
-        # Uruchom AsyncSniffer w CaptureModule
+        # Lazy initialize capture to avoid startup lag
+        if not self._capture_initialized:
+            # Apply current interface and filter settings
+            iface = self.interface_combo.currentData() if hasattr(self, 'interface_combo') else None
+            bpf = self.filter_combo.currentText().strip() if hasattr(self, 'filter_combo') else ''
+            try:
+                self._capture.initialize({'network_interface': iface, 'filter': bpf})
+                self._capture_initialized = True
+            except Exception:
+                pass
+        # Start packet capture
         try:
             if hasattr(self._capture, '_start_sniffing'):
                 self._capture._start_sniffing()
@@ -350,6 +351,9 @@ Methods
     
     def _show_packet_details_inline(self, row, col):
         """Wyświetla szczegóły pakietu po kliknięciu w tabeli"""
+        # Guard against out-of-range row index
+        if row < 0 or row >= len(self._packet_metas):
+            return
         try:
             # Pobierz metadane pakietu
             meta = self._packet_metas[row]
@@ -380,6 +384,9 @@ Methods
 
     def _show_packet_detail_dialog(self, row, col):
         """Open packet details in a separate dialog."""
+        # Guard against invalid row index
+        if row < 0 or row >= len(self._packet_metas):
+            return
         try:
             meta = self._packet_metas[row]
             raw = meta.get('raw_bytes', b'')
@@ -429,12 +436,31 @@ Methods
             ai_weight TEXT,
             geo TEXT
         )"""
-            )
+        )
         self._conn.commit()
 
-    def _save_packet_to_db(self, pkt_id, czas, src, dst, proto, size,
-        '''Function _save_packet_to_db - description.'''
-        ai_weight, geo):
+    def _save_packet_to_db(self, pkt_id, czas, src, dst, proto, size, ai_weight, geo):
+        """Save packet record to the SQLite database.
+
+        Parameters
+        ----------
+        pkt_id : int
+            Sequential packet identifier.
+        czas : str
+            Timestamp string of packet capture.
+        src : str
+            Source IP address.
+        dst : str
+            Destination IP address.
+        proto : str
+            Protocol name.
+        size : int or str
+            Packet size.
+        ai_weight : float or str
+            AI-generated weight for the packet.
+        geo : str
+            Geolocation or additional info.
+        """
         c = self._conn.cursor()
         c.execute(
             'INSERT INTO packets (pkt_id, czas, src, dst, proto, size, ai_weight, geo) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
@@ -465,9 +491,28 @@ Methods
             self._add_packet_from_db(*row)
         self._db_offset += len(rows)
 
-    def _add_packet_from_db(self, pkt_id, czas, src, dst, proto, size,
-        '''Function _add_packet_from_db - description.'''
-        ai_weight, geo):
+    def _add_packet_from_db(self, pkt_id, czas, src, dst, proto, size, ai_weight, geo):
+        """Add a packet entry from database to the table widget and apply row coloring.
+
+        Parameters
+        ----------
+        pkt_id : int
+            Packet identifier from database.
+        czas : str
+            Timestamp for the packet record.
+        src : str
+            Source IP of packet.
+        dst : str
+            Destination IP of packet.
+        proto : str
+            Protocol used.
+        size : int or str
+            Packet size.
+        ai_weight : float or str
+            AI-assigned anomaly score.
+        geo : str
+            Geolocation or other details.
+        """
         row = self.packets.rowCount()
         self.packets.insertRow(row)
         self.packets.setItem(row, 0, QTableWidgetItem(str(pkt_id)))
@@ -505,25 +550,31 @@ Methods
                 event = self._capture.generate_event()
                 if not event:
                     break
+                # Skip events without src/dst to avoid blanks
+                data = getattr(event, 'data', {}) or {}
+                if not data.get('src_ip') and not data.get('dst_ip'):
+                    continue
                 # Submit processing to background
                 fut = self._executor.submit(self._process_packet, event)
                 self._futures.append(fut)
-        # Collect completed futures and update UI in batch
+        # Collect completed futures and update UI in batch (limit per tick)
         if not self._futures:
             return
-        # Disable updates for batch insert
         self.packets.setUpdatesEnabled(False)
         done, pending = [], []
+        max_inserts = 10
+        inserts = 0
         for fut in self._futures:
-            if fut.done():
+            if fut.done() and inserts < max_inserts:
                 try:
                     meta = fut.result()
                     self._insert_packet_row(meta)
+                    inserts += 1
                 except Exception as e:
                     self.log_status(f'Błąd przetwarzania pakietu: {e}')
-                else:
+                finally:
                     done.append(fut)
-            else:
+            elif not fut.done() or (fut.done() and inserts >= max_inserts):
                 pending.append(fut)
         self._futures = pending
         self.packets.setUpdatesEnabled(True)
@@ -580,7 +631,11 @@ Methods
     def _insert_packet_row(self, meta):
         """Wstawia przetworzony pakiet do GUI."""
         # Store metadata and insert row at top
-        self._packet_metas.insert(0, meta)
+        # Keep metadata list in sync for detail views
+        try:
+            self._packet_metas.insert(0, meta)
+        except Exception:
+            pass
         # Insert row at top
         self._packet_counter += 1
         self.packets.insertRow(0)
@@ -624,8 +679,14 @@ Methods
                     item.setBackground(color)
         except:
             pass
-        # Store metadata
-        self._packet_metas.insert(0, meta)
+        # Trim oldest rows beyond max_display_rows
+        max_rows = getattr(self, '_max_display_rows', 100)
+        if self.packets.rowCount() > max_rows:
+            last_idx = self.packets.rowCount() - 1
+            self.packets.removeRow(last_idx)
+            if len(self._packet_metas) > max_rows:
+                self._packet_metas.pop()
+
         # Asynchronously save to DB
         try:
             pkt_id = self._packet_counter

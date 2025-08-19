@@ -1,0 +1,86 @@
+Oto propozycja wysokopoziomowego przeprojektowania aplikacji w modelu „pluginów”, tak aby:
+
+• moduł przechwytywania pakietów mógł być ładowany, uruchamiany i restartowany niezależnie,
+• dashboard (GUI) był tylko jednym z pluginów i ładował się bardzo szybko,
+• uniknąć blokowania głównego wątku przy starcie Twisted lub Scapy.
+
+Wydzielenie interfejsu pluginu
+– utwórz w katalogu core/ plik plugin_base.py z abstrakcją:
+class PluginBase:
+    def initialize(self, cfg: dict): ...
+    def start(self): ...
+    def stop(self): ...
+    def handle_event(self, ev): ...
+    def generate_event(self): ...
+
+Refaktoring modułu capture jako plugin
+– przenieś całą logikę z capture.py do nowego pliku plugins/capture_plugin.py, dziedzicząc po PluginBase.
+– odpalaj przechwytywanie w osobnym wątku lub procesie (QThread/ multiprocessing) i przekazuj dane przez kolejkę (queue.Queue), unikając blokad w Qt.
+– skonfiguruj, by na Windows domyślnie używać Scapy AsyncSniffer, a na Linuxie ewentualnie Twisted (ale uruchamianie reactora w tle przez QThread).
+
+Refaktoring dashboard jako plugin
+– utwórz plugins/dashboard_plugin.py, który implementuje GUI (ładując dashboard.ui) i subskrybuje zdarzenia z capture-pluginu.
+– główna aplikacja (main.py) po starcie tylko instancjonuje loader pluginów, ładuje i inicjalizuje każdy plugin, a następnie łączy sygnały/sloty między nimi.
+
+Loader pluginów i orchestrator
+– w core/orchestrator.py napisz prosty loader:
+• przeszukuje katalog plugins/, importuje każdy moduł, instancjonuje klasę dziedziczącą PluginBase, wywołuje initialize().
+• trzyma listę pluginów, wywołuje start() i w pętli timerowej (QTimer) pobiera generate_event() ze źródłowego pluginu capture i dystrybuuje je do kolejnych pluginów (UI, moduły AI, logi).
+
+Korzyści
+– dashboard ładuje się błyskawicznie, bo capture startuje asynchronicznie w tle,
+– plugin capture można łatwo przełączyć między Scapy/Twisted, albo zastąpić np. pcapyngiem w C,
+– rozdzielenie odpowiedzialności upraszcza testy i debug.
+
+Twój obecny capture.py już częściowo wspiera Twisted (na Linux), a na Windows automatycznie używa Scapy AsyncSniffer. Jeśli Twisted jest za wolny lub niestabilny, możesz po prostu wyłączyć load Twisted w pluginie (zostawić tylko AsyncSniffer), albo przenieść całość do dedykowanego wątku.
+
+Ta zmiana przyniosłaby przede wszystkim:
+
+• Lepszą separację odpowiedzialności
+– moduł przechwytywania działa w izolowanym wątku/procesie, GUI nie czeka na start sniffera.
+• Szybszy start aplikacji
+– dashboard ładuje się natychmiast, a sniffing uruchamia się asynchronicznie w tle.
+• Łatwiejszą wymianę i testowanie komponentów
+– każdy plugin (capture, dashboard, AI, eksport itp.) można wymieniać, rozwijać i testować niezależnie.
+• Elastyczność w wyborze technologii
+– możesz mieć jedną implementację capture na Windows (Scapy), drugą na Linux (Twisted) albo dodać nową (np. libpcap w C) bez zmiany GUI.
+• Mniej blokad i lepsza responsywność
+– żadne długotrwałe operacje (inicjalizacja Twisted, analiza AI) nie zablokują głównego wątku Qt.
+• Skalowalność projektu
+– w przyszłości łatwiej dodasz nowe funkcje (np. plugin geolokalizacji, plugin bazodanowy) bez ingerencji w rdzeń aplikacji.
+
+--------------------------------------------------------------
+Oto pierwsze kroki faktycznej migracji do architektury pluginowej:
+
+Core
+a) Mamy już w core/plugin_base.py abstrakcję PluginBase.
+b) W plugin_loader.py ładowanie pluginów z plugins_config.yaml.
+c) W orchestrator.py zastąp dotychczasowe „modules” jedną listą pluginów i:
+– w initialize() nie importuj już statycznie CaptureModule, ale wywołuj load_plugins().
+– wywołuj plugin.start() dla każdego pluginu, a w pętli eventowej używaj plugin.generate_event() i plugin.handle_event().
+
+Capture Plugin
+• Przenieś logikę z capture.py do plugins/capture_plugin.py, dziedzicząc po PluginBase.
+• W wątku (lub QThread) uruchamiasz Scapy/Twisted, wrzucasz zdarzenia do queue.Queue().
+• Implementujesz generate_event() jako queue.get_nowait().
+
+Dashboard Plugin
+• W plugins/dashboard_plugin.py tworzysz klasę DashboardPlugin(PluginBase).
+• W initialize() ładujesz UI (uic.loadUi('dashboard.ui')) i konfigurujesz sygnały.
+• W start() pokazujesz główne okno (lub zwracasz gotowy widget do MainWindow).
+• generate_event() może zwracać None (dashboard sam odświeża się co QTimer), a handle_event() może przyjmować zdarzenia typu DEVICE_DETECTED itp.
+
+Main i Orchestrator
+• W main.py wywołuj teraz tylko:
+orchestrator = Orchestrator()
+orchestrator.initialize()
+orchestrator.start_all()  # nowa metoda, która wywołuje plugin.start()
+orchestrator.run_event_loop()
+
+• Usuń bezpośrednie importy DashboardTab w main_window.py – zastąp „taby” pluginami zwróconymi z loadera.
+
+Migracja krok po kroku
+Zacznij od CapturePlugin i upewnij się, że CLI-mode (orchestrator.run) dalej działa.
+Następnie zaadapteruj dashboard do pluginu i dokonaj minimalnej zmiany w MainWindow, ładowania tylko GUI-pluginu.
+Na koniec podepnij loader pluginów pod pełny Qt–MainWindow, zamiast statycznej listy.
+Dzięki temu rozbijesz monolit na oddzielne, wymienne komponenty, przyspieszysz start GUI, a przechwytywanie będzie pracować w izolowanym wątku.

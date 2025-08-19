@@ -71,21 +71,30 @@ class InfoWorker(QObject):
 
 class InfoTab(QWidget):
     """Zakładka z informacjami o podzespołach komputera"""
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, auto_thread=False):
         '''Function __init__ - description.'''
         super().__init__(parent)
+        self._auto_thread = auto_thread
         layout = QVBoxLayout(self)
         self.table = QTableWidget(0, 2)
         self.table.setHorizontalHeaderLabels(['Parametr', 'Wartość'])
         layout.addWidget(self.table)
-        # start background thread
-        self._thread = QThread(self)
-        self._worker = InfoWorker()
-        self._worker.moveToThread(self._thread)
-        self._thread.started.connect(self._worker.run)
-        self._worker.finished.connect(self._on_info_ready)
-        self._worker.finished.connect(self._thread.quit)
-        self._thread.start()
+        # start background thread if enabled
+        if self._auto_thread:
+            self._thread = QThread(self)
+            self._worker = InfoWorker()
+            self._worker.moveToThread(self._thread)
+            self._thread.started.connect(self._worker.run)
+            self._worker.finished.connect(self._on_info_ready)
+            self._worker.finished.connect(self._thread.quit)
+            self._thread.start()
+    def __del__(self):
+        try:
+            if getattr(self, '_auto_thread', False) and hasattr(self, '_thread'):
+                self._thread.quit()
+                self._thread.wait(500)
+        except Exception:
+            pass
 
     def _on_info_ready(self, rows):
         '''Function _on_info_ready - description.'''

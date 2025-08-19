@@ -56,14 +56,18 @@ class NNLayout:
             params_layout.addWidget(QLabel(label)); params_layout.addWidget(widget_input)
         params_group.setLayout(params_layout)
         layout.addWidget(params_group)
-        # Przyciski trening/ewaluacja
+        # Przyciski: trening, ewaluacja i test AI
         btn_layout = QHBoxLayout()
         self.train_btn = QPushButton('Trenuj NN')
         self.eval_btn = QPushButton('Oceń model')
-        btn_layout.addWidget(self.train_btn); btn_layout.addWidget(self.eval_btn)
+        self.check_btn = QPushButton('Sprawdź AI')
+        btn_layout.addWidget(self.train_btn)
+        btn_layout.addWidget(self.eval_btn)
+        btn_layout.addWidget(self.check_btn)
         layout.addLayout(btn_layout)
         # Wyniki i log
-        self.results_view = QTextEdit(); self.results_view.setReadOnly(True)
+        self.results_view = QTextEdit()
+        self.results_view.setReadOnly(True)
         layout.addWidget(self.results_view)
         # Pasek postępu i anulacja
         self.progress = QProgressBar()
@@ -84,6 +88,7 @@ class NNLayout:
         controls = {
             'train_btn': self.train_btn,
             'eval_btn': self.eval_btn,
+            'check_btn': self.check_btn,
             'cancel_btn': self.cancel_btn,
             'progress': self.progress,
             'lr_input': self.lr_input,

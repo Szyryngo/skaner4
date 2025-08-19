@@ -15,3 +15,6 @@ python-nmap>=0.6.1  # for Nmap scanning integration
 
 # Uwagi dotyczące instalacji specyficzne dla platformy:
 # Zobacz README.md dla instrukcji dotyczących Windows (długie ścieżki, TensorFlow CPU-only itp.)
+networkx>=2.8  # for spring (force-directed) layout
+twisted>=22.0.0  # asynchronous networking framework for plugin-based sniffing
+dpkt>=1.9.8  # for parsing pcap packets in Twisted sniffer

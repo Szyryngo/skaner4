@@ -23,6 +23,12 @@ def run_qt_gui():
     """
     # Initialize and run the Qt GUI, catching any exceptions during setup or execution
     try:
+        # Integrate Twisted reactor with Qt before QApplication
+        try:
+            from twisted.internet import qtreactor  # type: ignore
+            qtreactor.install()
+        except ImportError:
+            pass
         from qtui.main_window import MainWindow
         from PyQt5.QtWidgets import QApplication
         app = QApplication(sys.argv)
@@ -75,8 +81,10 @@ ui_port: 5000
         gui_mode = cfg.get('gui', 'qt')
     except Exception:
         gui_mode = 'qt'
+    # Launch GUI or CLI based on configuration
     if gui_mode == 'qt':
         run_qt_gui()
     else:
         orchestrator = Orchestrator()
+        orchestrator.initialize()
         orchestrator.run()

@@ -124,6 +124,15 @@ class SOCLayout:
         ai_layout.addWidget(ai_table)
         ai_group.setLayout(ai_layout)
 
+        # Scan Results panel
+        scan_group = QGroupBox('Scan Results')
+        scan_layout = QVBoxLayout()
+        scan_table = QTableWidget(0, 3)
+        scan_table.setHorizontalHeaderLabels(['IP', 'MAC', 'Ports'])
+        scan_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        scan_layout.addWidget(scan_table)
+        scan_group.setLayout(scan_layout)
+
         # Chart
         chart_group = QGroupBox('Alert Severity Chart')
         chart_layout2 = QVBoxLayout()
@@ -139,6 +148,7 @@ class SOCLayout:
         right_layout.addWidget(raw_group, stretch=1)
         right_layout.addWidget(group_box, stretch=1)
         right_layout.addWidget(ai_group, stretch=1)
+        right_layout.addWidget(scan_group, stretch=1)
         right_layout.addWidget(chart_group, stretch=1)
         content_layout.addLayout(right_layout, stretch=2)
         main_layout.addLayout(content_layout)
@@ -163,5 +173,6 @@ class SOCLayout:
             'cmd_log': cmd_log,
             'group_table': group_table,
             'ai_table': ai_table,
-            'chart_canvas': canvas
+            'chart_canvas': canvas,
+            'scan_table': scan_table
         }

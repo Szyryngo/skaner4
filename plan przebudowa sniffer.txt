@@ -1,0 +1,32 @@
+Usuń Scapy i zamiast AsyncSniffer użyj twisted.protocols.pcap.PcapProtocol (lub własnego protokołu opartego o surowe gniazdo), który przechwytuje ramki na poziomie warstwy 2 i pozwala stosować BPF.
+Zainstaluj i podłącz qtreactor (twisted.internet.qtreactor) przed stworzeniem QApplication, żeby reactor Twisted współdziałał z Qt i umożliwiał nieblokujący odczyt pakietów.
+W CaptureModule zmień start sniffera na np.:
+• reactor.listenMulticast lub reactor.adoptStreamFD/fdesc z PcapProtocol,
+• w callbacku parsuj nagłówki (Ether, IP, TCP/UDP/ICMP) samodzielnie albo korzystaj z dpkt/dpkt.pcap,
+• emituj Event('NEW_PACKET', data) w sygnale Twisted → przekazuj dalej do SOCTab.
+Zastąp QThread z workerem Twistedowym: moduł CaptureWorker można zamienić na klasę bazującą na twisted.internet.protocol.Protocol, a w GUI odbierać zdarzenia przez Deferred lub callbacki podpięte do reactor.callFromThread.
+Reszta logiki (detection, AI, Snort) zostaje niezmieniona – tylko źródło zdarzeń zmieni interfejs na Twisted.
+Podsumowując:
+• zamiast AsyncSniffer użyj PcapProtocol lub surowych gniazd w Twisted,
+• zintegruj reactor z Qt przez qtreactor,
+• przekazuj pakiety jako Twisted-owe sygnały/Deferredy do istniejącej warstwy UI.
+
+Przepisanie capture na Twisted da nam przede wszystkim:
+
+• Wspólny, asynchroniczny „reactor” dla sieci i GUI (poprzez qtreactor) – jeden event-loop zamiast kombinować QThread + callbacks.
+• Zaletę nieblokującego I/O: obsłużymy setki/tłumy połączeń równolegle bez osobnych wątków.
+• Gotowe protokoły Twisted (TCP, UDP, SSL/TLS, HTTP, DNS, SSH, itd.), co pozwala łatwo dodać np. serwer HTTP lub WebSocket obok sniffera.
+• Elastyczne zarządzanie Deferred/Callback – łatwiejsze wstawianie opóźnień, timeoutów, retry, backoff itp.
+• Centralne logowanie i obsługę błędów – reactor automatycznie poradzi sobie z wyjątkami i restartem protokołów.
+• Lepszą skalowalność i wydajność przy dużej liczbie równoczesnych połączeń czy strumieni pakietów.
+• Łatwą integrację z innymi źródłami zdarzeń (pliki, porty szeregowe, biblioteki MQTT itp.) bez doklejania wielowątkowości.
+• Większą elastyczność protokołu – możesz napisać własny Twisted-owy protokół parsujący BPF, dpkt czy raw sockets zamiast Scapy.
+
+Podsumowując: zyskujemy jednolitą, skalowalną, asynchroniczną infrastrukturę sieciową, którą łatwiej rozbudować o kolejne usługi i protokoły.
+
+Warto to wyodrębnić jako pluginy – wtedy:
+
+• Luźne powiązanie: główny silnik SOC nie zna szczegółów implementacji sniffera, możesz dynamicznie dokładać/usuwać moduły sniffingu (Scapy, Twisted, pcapy itd.).
+• Izolacja odpowiedzialności: każdy plugin odpowiada tylko za jedno źródło zdarzeń, testy i rozwój są prostsze.
+• Rozszerzalność: łatwo dodać nowy protokół czy mechanizm (np. SNMP, MQTT, Kafka) jako kolejny plugin.
+• Konfiguracja: użytkownik wybiera w pliku YAML, które pluginy ładować i w jakiej kolejności.

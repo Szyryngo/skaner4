@@ -41,3 +41,7 @@
 	- **1.5.0** — rozbudowa reguł Snort, tabela reguł SNORT, wyciszone debugi, automatyczne logowanie raw_event w SOC, rozszerzone reguły exfiltration, DNS attacks, Telnet scan.
 
 	- **1.5.10** — dodano panele "Raw Events" i "AI Scores" w zakładce SOC; przywrócono i poprawiono metodę `build` w `soc_layout.py`; uzupełniono obsługę tabel w `soc_tab.py`; zaktualizowano wersję aplikacji do 1.5.10 stable.
+
+	- **1.7.0-alpha** — pierwsza wersja alfa z refaktoryzacją SOC tab, obsługą buforowania zdarzeń oraz batchowymi aktualizacjami interfejsu.
+
+# Wytyczne dotyczące kolejnych wydań pozostają zgodne z semver

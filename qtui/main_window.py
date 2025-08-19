@@ -1,6 +1,6 @@
 """MainWindow module - define the primary Qt window with tabs and system metrics toolbar."""
 import sys
-VERSION = '1.5.10 stable'
+VERSION = '1.7.0-alpha'
 import psutil
 from PyQt5.QtWidgets import QApplication, QMainWindow, QTabWidget, QToolBar, QLabel, QWidget, QSizePolicy
 from PyQt5.QtCore import QTimer, Qt
@@ -28,19 +28,20 @@ class MainWindow(QMainWindow):
         tabs = QTabWidget()
         self.setCentralWidget(tabs)
         # Stwórz instancje zakładek dla dalszych połączeń
+        # Stwórz instancje zakładek dla dalszych połączeń
         dash_tab = DashboardTab()
-        dev_tab = DevicesTab()
+        dev_tab = DevicesTab(auto_timer=True)
         scan_tab = ScannerTab()
         soc_tab = SOCTab()
         nn_tab = NNTab()
         config_tab = ConfigTab()
-        snort_rules_tab = SnortRulesTab(  # pass plugin instances
-            soc_tab._snort_plugins
+        snort_rules_tab = SnortRulesTab(
+            soc_tab._snort_plugins  # pass plugin instances
         )
         # Keep reference for proper thread shutdown
         self._soc_tab = soc_tab
-        info_tab = InfoTab()
-        # Dodaj zakładki
+        info_tab = InfoTab(auto_thread=True)
+        # Dodaj zakładki do widżetu kart
         tabs.addTab(dash_tab, 'Dashboard')
         tabs.addTab(dev_tab, 'Devices')
         tabs.addTab(scan_tab, 'Scanner')
@@ -49,6 +50,8 @@ class MainWindow(QMainWindow):
         tabs.addTab(config_tab, 'Config')
         tabs.addTab(snort_rules_tab, 'Reguły SNORT')
         tabs.addTab(info_tab, 'Info')
+        # Przechowaj referencję do DashboardTab
+        self.dash_tab = dash_tab
         # Propaguj zmianę silnika AI z Config do Dashboard
         if 'switch_ai_btn' in config_tab.ctrls and 'ai_combo' in config_tab.ctrls:
             config_tab.ctrls['switch_ai_btn'].clicked.connect(

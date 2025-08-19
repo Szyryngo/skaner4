@@ -13,109 +13,114 @@ from qtui.devices_layout import DevicesLayout
 
 class DevicesTab(QWidget):
     """Zakładka Devices: lista żywych urządzeń"""
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, auto_timer=False):
         '''Function __init__ - description.'''
         super().__init__(parent)
+        # Build UI
         widget, ctrls = DevicesLayout().build()
-        # Osadź zbudowany widget wewnątrz tej zakładki
         layout = QVBoxLayout()
         layout.addWidget(widget)
         self.setLayout(layout)
-        # Zapamiętaj kontrolki dla ewentualnego użycia i wiringu
         self.ctrls = ctrls
-        # Add default log wiring for device detection controls
-        if 'refresh_btn' in self.ctrls:
-            self.ctrls['refresh_btn'].clicked.connect(self._on_refresh)
+        # Initial log load
         if 'cmd_log' in self.ctrls:
-            # Log initial load
-            self.ctrls['cmd_log'].append(f"[{datetime.now().strftime('%H:%M:%S')}] Urządzenia załadowane")  
-        
-        # Load MAC OUI mapping for device identification
+            self.ctrls['cmd_log'].append(f"[{datetime.now().strftime('%H:%M:%S')}] Urządzenia załadowane")
+        # Load MAC OUI mapping
         mac_cfg_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'config', 'mac_devices.yaml'))
         try:
             with open(mac_cfg_path, 'r', encoding='utf-8') as f:
                 mac_map = yaml.safe_load(f) or {}
         except Exception:
             mac_map = {}
-        # Normalize keys: uppercase without trailing colon
         self._mac_map = {k.rstrip(':').upper(): v for k, v in mac_map.items()}
-        # Initialize capture and devices modules for live updates  
-        self._capture = CaptureModule()  
-        self._capture.initialize({'network_interface': None, 'filter': ''})  
-        # Detect active interface for device sniffing  
-        try:  
-            test_results = self._capture.test_all_interfaces()  
-            active_iface = next((iface for iface, cnt in test_results.items() if isinstance(cnt, int) and cnt > 0), None)  
-            if active_iface:  
-                self._capture.set_interface(active_iface)  
-                self.ctrls['cmd_log'].append(f"[{datetime.now().strftime('%H:%M:%S')}] Aktywny interfejs: {active_iface}")  
-            else:  
-                self.ctrls['cmd_log'].append(f"[{datetime.now().strftime('%H:%M:%S')}] Brak ruchu na interfejsach")  
-        except Exception as e:  
-            self.ctrls['cmd_log'].append(f"[{datetime.now().strftime('%H:%M:%S')}] Błąd testu interfejsów: {e}")  
-        # Start sniffing on detected (or default) interface  
-        self._capture._start_sniffing()  
-        self._devices_module = DevicesModule()  
-        self._devices_module.initialize({})  
-        # Timer to poll for new device events  
-        self._device_timer = QTimer(self)  
-        self._device_timer.timeout.connect(self._process_device_events)  
-        self._device_timer.start(1000)  
+        # Connect refresh button if available
+        if 'refresh_btn' in self.ctrls:
+            self.ctrls['refresh_btn'].clicked.connect(self._on_refresh)
+        # Initialize capture and devices modules
+        self._capture = CaptureModule()
+        self._capture.initialize({'network_interface': None, 'filter': ''})
+        self._devices_module = DevicesModule()
+        self._devices_module.initialize({})
+        # Optionally start sniffing and polling if enabled
+        self._device_timer = None
+        if auto_timer:
+            try:
+                self._capture._start_sniffer()
+            except Exception:
+                pass
+            self._device_timer = QTimer(self)
+            self._device_timer.timeout.connect(self._process_device_events)
+            self._device_timer.start(1000)
+    def __del__(self):
+        """Cleanup timer on deletion to avoid running timers in tests."""
+        try:
+            self._device_timer.stop()
+        except Exception:
+            pass
 
-    def _process_device_events(self):  
-        """Poll capture and devices module for new events, update UI table and log."""  
-        # Process incoming packets  
-        pkt_event = self._capture.generate_event()  
-        if pkt_event:  
-            # Feed to devices module  
-            result = self._devices_module.handle_event(pkt_event)  
-            events = []  
-            if result:  
-                try:  
-                    for e in result:  
-                        events.append(e)  
-                except TypeError:  
-                    events.append(result)  
-            # Also check for timeouts  
-            for e in self._devices_module.generate_event():  
-                events.append(e)  
-            # Handle each event  
-            for e in events:  
-                if e.type == 'DEVICE_DETECTED':  
-                    ip = e.data['ip']  
-                    # only show private LAN addresses
-                    try:
-                        if not ipaddress.ip_address(ip).is_private:
-                            continue
-                    except Exception:
-                        pass
-                    mac = e.data['mac']  
-                    ts = e.data['first_seen']  
-                    time_str = datetime.fromtimestamp(ts).strftime('%H:%M:%S')  
-                    count = self._devices_module.devices.get(ip, {}).get('count', 1)  
-                    row = self.ctrls['devices'].rowCount()  
-                    self.ctrls['devices'].insertRow(row)  
-                    self.ctrls['devices'].setItem(row, 0, QTableWidgetItem(ip))  
-                    self.ctrls['devices'].setItem(row, 1, QTableWidgetItem(mac))  
-                    self.ctrls['devices'].setItem(row, 2, QTableWidgetItem(time_str))  
-                    self.ctrls['devices'].setItem(row, 3, QTableWidgetItem(str(count)))  
-                    self.ctrls['devices'].setItem(row, 4, QTableWidgetItem('Active'))  
-                    # Identify device type by MAC OUI and display in the 'Typ' column
-                    oui = ':'.join(mac.split(':')[:3]).upper()
-                    info = self._mac_map.get(oui, {})
-                    dtype = f"{info.get('manufacturer','Unknown')} ({info.get('type','Unknown')})"
-                    self.ctrls['devices'].setItem(row, 5, QTableWidgetItem(dtype))
-                    self.ctrls['cmd_log'].append(f"[{datetime.now().strftime('%H:%M:%S')}] Wykryto urządzenie: {ip} {mac}")  
-                elif e.type == 'DEVICE_INACTIVE':  
-                    ip = e.data['ip']  
-                    # Remove from table  
-                    tbl = self.ctrls['devices']  
-                    for r in range(tbl.rowCount()):  
-                        item = tbl.item(r, 0)  
-                        if item and item.text() == ip:  
-                            tbl.removeRow(r)  
-                            self.ctrls['cmd_log'].append(f"[{datetime.now().strftime('%H:%M:%S')}] Urządzenie nieaktywne: {ip}")  
-                            break
+    def _process_device_events(self):
+        """Poll capture and devices module for new events, update UI table and log."""
+        events = []
+        # Process incoming packet events
+        pkt_event = self._capture.generate_event()
+        if pkt_event:
+            result = self._devices_module.handle_event(pkt_event)
+            if result:
+                try:
+                    for e in result:
+                        events.append(e)
+                except TypeError:
+                    events.append(result)
+        # Always check for inactivity/timeouts
+        gen_evt = self._devices_module.generate_event()
+        if gen_evt:
+            try:
+                for e in gen_evt:
+                    events.append(e)
+            except TypeError:
+                events.append(gen_evt)
+        # Handle each event
+        for e in events:
+            if e.type == 'DEVICE_DETECTED':
+                ip = e.data['ip']
+                # only show private LAN addresses
+                try:
+                    if not ipaddress.ip_address(ip).is_private:
+                        continue
+                except Exception:
+                    pass
+                mac = e.data['mac']
+                ts = e.data.get('first_seen', None)
+                time_str = datetime.fromtimestamp(ts).strftime('%H:%M:%S') if ts else ''
+                # Safely get device count
+                devices_dict = getattr(self._devices_module, 'devices', {})
+                count = devices_dict.get(ip, {}).get('count', 1)
+                row = self.ctrls['devices'].rowCount()
+                self.ctrls['devices'].insertRow(row)
+                self.ctrls['devices'].setItem(row, 0, QTableWidgetItem(ip))
+                self.ctrls['devices'].setItem(row, 1, QTableWidgetItem(mac))
+                self.ctrls['devices'].setItem(row, 2, QTableWidgetItem(time_str))
+                self.ctrls['devices'].setItem(row, 3, QTableWidgetItem(str(count)))
+                self.ctrls['devices'].setItem(row, 4, QTableWidgetItem('Active'))
+                # Identify device type by MAC OUI
+                oui = ':'.join(mac.split(':')[:3]).upper()
+                info = self._mac_map.get(oui, {})
+                dtype = f"{info.get('manufacturer','Unknown')} ({info.get('type','Unknown')})"
+                self.ctrls['devices'].setItem(row, 5, QTableWidgetItem(dtype))
+                self.ctrls['cmd_log'].append(
+                    f"[{datetime.now().strftime('%H:%M:%S')}] Wykryto urządzenie: {ip} {mac}"
+                )
+            elif e.type == 'DEVICE_INACTIVE':
+                ip = e.data['ip']
+                tbl = self.ctrls['devices']
+                for r in range(tbl.rowCount()):
+                    item = tbl.item(r, 0)
+                    if item and item.text() == ip:
+                        tbl.removeRow(r)
+                        self.ctrls['cmd_log'].append(
+                            f"[{datetime.now().strftime('%H:%M:%S')}] Urządzenie nieaktywne: {ip}"
+                        )
+                        break
 
     def _on_refresh(self):
         """Perform ARP scan on the network of the selected interface and update the table."""

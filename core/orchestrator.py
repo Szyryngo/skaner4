@@ -34,7 +34,7 @@ class Orchestrator:
         self.gui = None
 
     def initialize(self):
-        """Load configuration and initialize all modules and plugins.
+        """Load configuration and initialize all plugins.
 
         Reads YAML config files and calls initialize() on each module and plugin based on loaded settings.
         """
@@ -42,11 +42,7 @@ class Orchestrator:
         plugins_config_path = os.path.join(self.config_dir,
             'plugins_config.yaml')
         config = ConfigManager(config_path).load()
-        self.modules = [CaptureModule(), FeaturesModule(), DetectionModule(
-            ), OptimizerModule(), DevicesModule(), DevicesSnifferModule(),
-            ScannerModule()]
-        for module in self.modules:
-            module.initialize(config)
+        # Load and initialize plugins
         self.plugins = load_plugins(plugins_config_path, self.plugins_dir)
         for plugin in self.plugins:
             plugin.initialize(config)
@@ -69,68 +65,45 @@ class Orchestrator:
         SNORT_ALERT events are printed to console; DEVICE_DETECTED events are forwarded to the GUI when set.
         """
         self.initialize()
-        # Jeśli jest CaptureModule, rozpocznij sniffing pakietów
-        for module in self.modules:
-            if hasattr(module, '_start_sniffing'):
+        # Start all non-UI plugins first
+        for plugin in self.plugins:
+            if plugin.__class__.__name__ != 'DashboardPlugin':
                 try:
-                    module._start_sniffing()
+                    plugin.start()
                 except Exception:
                     pass
+
+        # Run event dispatch loop in background thread
+        import threading, time
+        def _dispatch_loop():
+            while True:
+                for plugin in self.plugins:
+                    try:
+                        result = plugin.generate_event()
+                    except Exception:
+                        continue
+                    if not result:
+                        continue
+                    events = result if isinstance(result, list) else [result]
+                    for ev in events:
+                        for target in self.plugins:
+                            try:
+                                target.handle_event(ev)
+                            except Exception:
+                                pass
+                time.sleep(0.05)
+        threading.Thread(target=_dispatch_loop, daemon=True).start()
+
+        # Finally, start the Dashboard (UI) plugin, which will block on its event loop
+        for plugin in self.plugins:
+            if plugin.__class__.__name__ == 'DashboardPlugin':
+                try:
+                    plugin.start()
+                except Exception:
+                    pass
+                break
         import concurrent.futures
         from concurrent.futures import ThreadPoolExecutor, as_completed
         # Wykorzystanie puli wątków do równoległego generowania zdarzeń
-        with ThreadPoolExecutor(max_workers=len(self.modules + self.plugins)) as executor:
-            while True:
-                # Generowanie zdarzeń równolegle
-                futures = {executor.submit(obj.generate_event): obj for obj in (self.modules + self.plugins)}
-                for fut in as_completed(futures):
-                    try:
-                        result = fut.result()
-                        # przyjmuj tylko Event lub listę Event
-                        if isinstance(result, Event):
-                            self.event_queue.append(result)
-                        elif hasattr(result, '__iter__'):
-                            for ev in result:
-                                if isinstance(ev, Event):
-                                    self.event_queue.append(ev)
-                    except Exception as e:
-                        print(f'Błąd generate_event w module {futures[fut].__class__.__name__}: {e}')
-                # Obsługa kolejki zdarzeń
-                while self.event_queue:
-                    event = self.event_queue.pop(0)
-                    for obj in (self.modules + self.plugins):
-                        try:
-                            result = obj.handle_event(event)
-                            if not result:
-                                continue
-                            # Obsługa pojedynczego eventu
-                            if isinstance(result, Event):
-                                # drukuj SNORT_ALERT do konsoli
-                                if result.type == 'SNORT_ALERT':
-                                    sid = result.data.get('sid')
-                                    msg = result.data.get('msg')
-                                    src = result.data.get('src_ip')
-                                    dst = result.data.get('dst_ip')
-                                    print(f'[SNORT_ALERT] SID={sid} MSG="{msg}" SRC={src} DST={dst}')
-                                self.event_queue.append(result)
-                                # GUI obsługuje tylko DEVICE_DETECTED
-                                if self.gui and result.type == 'DEVICE_DETECTED':
-                                    self.gui.handle_event(result)
-                            # Obsługa wielu eventów
-                            elif hasattr(result, '__iter__'):
-                                for e in result:
-                                    if isinstance(e, Event):
-                                        if e.type == 'SNORT_ALERT':
-                                            sid = e.data.get('sid')
-                                            msg = e.data.get('msg')
-                                            src = e.data.get('src_ip')
-                                            dst = e.data.get('dst_ip')
-                                            print(f'[SNORT_ALERT] SID={sid} MSG="{msg}" SRC={src} DST={dst}')
-                                        self.event_queue.append(e)
-                                        if self.gui and e.type == 'DEVICE_DETECTED':
-                                            self.gui.handle_event(e)
-                        except Exception as e:
-                            print(f'Błąd w module/pluginie {obj.__class__.__name__}: {e}')
-                # Krótkie opóźnienie między iteracjami
-                import time
-                time.sleep(1)
+    # In event-driven model, plugins may run their own loops or timers
+    # Orchestrator now delegates fully to plugins

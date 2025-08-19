@@ -1,7 +1,28 @@
 plugins:
-  - path: example_plugin.py
-    class: ExamplePlugin
+  - path: capture_plugin.py
+    class: CapturePlugin
+    enabled: true
+  - path: features_plugin.py
+    class: FeaturesPlugin
+    enabled: true
+  - path: detection_plugin.py
+    class: DetectionPlugin
+    enabled: true
+  - path: optimizer_plugin.py
+    class: OptimizerPlugin
+    enabled: true
+  - path: devices_plugin.py
+    class: DevicesPlugin
+    enabled: true
+  - path: scanner_plugin.py
+    class: ScannerPlugin
     enabled: true
   - path: snort_rules_plugin.py
     class: SnortRulesPlugin
     enabled: true
+  - path: dashboard_plugin.py
+    class: DashboardPlugin
+    enabled: true
+  - path: example_plugin.py
+    class: ExamplePlugin
+    enabled: false

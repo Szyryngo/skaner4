@@ -134,6 +134,17 @@ class ScannerTab(QWidget):
         self.ctrls = ctrls
         self._scanner_module = ScannerModule()
         self._scanner_module.initialize({})
+        # Load MAC OUI mapping for manufacturer lookup
+        import yaml, os
+        mac_cfg_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'config', 'mac_devices.yaml'))
+        try:
+            with open(mac_cfg_path, 'r', encoding='utf-8') as f:
+                mac_map = yaml.safe_load(f) or {}
+        except Exception:
+            mac_map = {}
+        # Normalize keys
+        self._mac_map = {k.rstrip(':').upper(): v for k, v in mac_map.items()}
+
         # Connect buttons
         self.ctrls['start_btn'].clicked.connect(self._on_start_scan)
         # Connect optional buttons if available
@@ -226,34 +237,48 @@ class ScannerTab(QWidget):
             )
 
     def _on_port_scan_finished(self, open_ports, mac):
-        """Obsługa zakończenia port scan"""
-        table = self.ctrls.get('results_table')
-        if table:
-            table.setRowCount(0)
-            from PyQt5.QtWidgets import QTableWidgetItem
-            for row, port in enumerate(open_ports):
-                table.insertRow(row)
-                table.setItem(row, 0, QTableWidgetItem(self.ctrls['target_input'].text()))
-                table.setItem(row, 1, QTableWidgetItem(str(port)))
-                table.setItem(row, 2, QTableWidgetItem(mac))
-                table.setItem(row, 3, QTableWidgetItem(''))
-        now = datetime.now().strftime('%H:%M:%S')
-        self.ctrls['cmd_log'].append(f"[{now}] Port scan zakończony: {open_ports}")
+        '''Handler for PortScanWorker finished signal: update results table.'''
+        from PyQt5.QtWidgets import QTableWidgetItem
+        tbl = self.ctrls.get('results_table')
+        if tbl is None:
+            return
+        row = tbl.rowCount()
+        tbl.insertRow(row)
+        # IP is in target_input
+        ip = self.ctrls['target_input'].text()
+        tbl.setItem(row, 0, QTableWidgetItem(ip))
+        # Ports list
+        ports_str = ','.join(str(p) for p in open_ports) if open_ports else ''
+        tbl.setItem(row, 1, QTableWidgetItem(ports_str))
+        # MAC address
+        tbl.setItem(row, 2, QTableWidgetItem(mac or ''))
+        # Manufacturer lookup
+        prefix = ':'.join(mac.split(':')[:3]).upper() if mac else ''
+        info = self._mac_map.get(prefix, {})
+        producer = info.get('manufacturer', '')
+        tbl.setItem(row, 3, QTableWidgetItem(producer))
+        # Log completion
+        self.ctrls['cmd_log'].append(f"Port scan finished for {ip}: ports={ports_str}, mac={mac}")
 
     def _on_discovery_finished(self, results):
-        """Obsługa zakończenia discovery scan"""
-        table = self.ctrls.get('results_table')
-        if table:
-            table.setRowCount(0)
-            from PyQt5.QtWidgets import QTableWidgetItem
-            for row, item in enumerate(results):
-                table.insertRow(row)
-                table.setItem(row, 0, QTableWidgetItem(item['ip']))
-                table.setItem(row, 1, QTableWidgetItem(''))
-                table.setItem(row, 2, QTableWidgetItem(item.get('mac','')))
-                table.setItem(row, 3, QTableWidgetItem(''))
-        now = datetime.now().strftime('%H:%M:%S')
-        self.ctrls['cmd_log'].append(f"[{now}] Discovery zakończony: {len(results)} hostów")
+        '''Handler for DiscoveryWorker finished signal: update results table.'''
+        from PyQt5.QtWidgets import QTableWidgetItem
+        tbl = self.ctrls.get('results_table')
+        if tbl is None or not isinstance(results, list):
+            return
+        for host in results:
+            row = tbl.rowCount()
+            tbl.insertRow(row)
+            ip = host.get('ip', '')
+            mac = host.get('mac', '')
+            tbl.setItem(row, 0, QTableWidgetItem(ip))
+            tbl.setItem(row, 1, QTableWidgetItem(''))
+            tbl.setItem(row, 2, QTableWidgetItem(mac))
+            prefix = ':'.join(mac.split(':')[:3]).upper() if mac else ''
+            info = self._mac_map.get(prefix, {})
+            producer = info.get('manufacturer', '')
+            tbl.setItem(row, 3, QTableWidgetItem(producer))
+            self.ctrls['cmd_log'].append(f"Discovery finished: {ip} {mac}")
 
     def _process_scan_result(self):
         '''Function _process_scan_result - description.'''
@@ -287,31 +312,41 @@ class ScannerTab(QWidget):
         pass
 
     def _on_save(self):
-        '''Function _on_save - description.'''
-        # Placeholder for save action
-        pass
+        '''Handler for save button: export results to CSV file.'''
+        import csv
+        from datetime import datetime
+        tbl = self.ctrls.get('results_table')
+        if tbl is None:
+            return
+        rows = tbl.rowCount()
+        cols = tbl.columnCount()
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        filename = f"scan_results_{timestamp}.csv"
+        try:
+            with open(filename, 'w', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+                headers = [tbl.horizontalHeaderItem(c).text() for c in range(cols)]
+                writer.writerow(headers)
+                for r in range(rows):
+                    writer.writerow([tbl.item(r, c).text() if tbl.item(r, c) else '' for c in range(cols)])
+            self.ctrls['cmd_log'].append(f"[{datetime.now().strftime('%H:%M:%S')}] Zapisano wyniki do {filename}")
+        except Exception as e:
+            self.ctrls['cmd_log'].append(f"[{datetime.now().strftime('%H:%M:%S')}] Błąd zapisu: {e}")
 
     def _on_export(self):
-        """Eksport wyników skanowania do pliku CSV."""
-        from PyQt5.QtWidgets import QFileDialog
-        from datetime import datetime
-        default_name = f"scan_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
-        path, _ = QFileDialog.getSaveFileName(self, 'Zapisz wyniki skanowania', default_name, 'CSV (*.csv)')
-        if not path:
-            self.ctrls['cmd_log'].append('Eksport skanowania anulowany')
+        '''Handler for export button: send results to SIEM via ScannerModule.'''
+        from core.events import Event
+        tbl = self.ctrls.get('results_table')
+        if tbl is None:
             return
-        import csv
-        table = self.ctrls.get('results_table')
-        try:
-            with open(path, 'w', newline='', encoding='utf-8') as f:
-                writer = csv.writer(f)
-                # nagłówki
-                headers = [table.horizontalHeaderItem(i).text() for i in range(table.columnCount())]
-                writer.writerow(headers)
-                # wiersze
-                for r in range(table.rowCount()):
-                    row = [table.item(r,c).text() if table.item(r,c) else '' for c in range(table.columnCount())]
-                    writer.writerow(row)
-            self.ctrls['cmd_log'].append(f'Zapisano wyniki skanowania: {path}')
-        except Exception as e:
-            self.ctrls['cmd_log'].append(f'Błąd zapisu wyników skanowania: {e}')
+        data = []
+        for r in range(tbl.rowCount()):
+            row_data = {}
+            for c, key in enumerate(['ip','ports','mac','manufacturer']):
+                item = tbl.item(r, c)
+                row_data[key] = item.text() if item else ''
+            data.append(row_data)
+        ev = Event('SIEM_EXPORT', {'results': data})
+        self._scanner_module.handle_event(ev)
+        from datetime import datetime
+        self.ctrls['cmd_log'].append(f"[{datetime.now().strftime('%H:%M:%S')}] Eksport do SIEM: {len(data)} rekordów")

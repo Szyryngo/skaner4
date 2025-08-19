@@ -12,7 +12,7 @@ import yaml
 
 from core.interfaces import ModuleBase
 from core.events import Event
-# Suppress print statements to prevent stdout locking at shutdown
+# Suppression of all print statements to avoid duplicate logs
 print = lambda *args, **kwargs: None
 
 try:
@@ -78,52 +78,55 @@ class SnortRulesPlugin(ModuleBase):
                     mtime = os.path.getmtime(self.rules_path)
                     if mtime != self.rules_mtime:
                         self._load_rules()
-                        print(f"SnortRulesPlugin: przeładowano reguły (mtime: {mtime})", flush=True)
+                        # print(f"SnortRulesPlugin: przeładowano reguły (mtime: {mtime})", flush=True)
                 except Exception:
                     pass
                 time.sleep(5)
         threading.Thread(target=_watch_rules, daemon=True).start()
 
     def handle_event(self, event):
-        """Process NEW_PACKET events, match against loaded rules, and emit SNORT_ALERTs.
-
-        Parameters
-        ----------
-        event : Event
-            Incoming event with packet data fields required for rule matching.
-
-        Returns
-        -------
-        Event or None
-            SNORT_ALERT event on match, else None.
-        """
-        print(f"[DEBUG SNORT] handle_event pkt: type={event.data.get('protocol')} "
-              f"src={event.data.get('src_ip')} dst={event.data.get('dst_ip')} "
-              f"flags={event.data.get('tcp_flags')} itype={event.data.get('icmp_type')}", flush=True)
-
-        # obsługa tylko nowych pakietów
+        """Simple matching for NEW_PACKET: ICMP type and TCP threshold."""
         if event.type != 'NEW_PACKET':
             return None
-        # debug: start handle_event for matching
-        print(f"[DEBUG SNORT] handle_event start: protocol={proto}, icmp_type={data.get('icmp_type')}", flush=True)
-        if proto == 'icmp':
-            print(f"[DEBUG SNORT] ICMP debug: listing all rules' protocols and itype options:", flush=True)
-            for rule in self.rules:
-                print(f"  rule sid={rule['sid']} proto={rule['protocol']} itype_opt={rule['options'].get('itype')}", flush=True)
-        data = event.data
-        # protokół
-        proto_val = data.get('protocol', '')
-        if isinstance(proto_val, int):
-            if proto_val == 1:
-                proto = 'icmp'
-            elif proto_val == 6:
-                proto = 'tcp'
-            elif proto_val == 17:
-                proto = 'udp'
-            else:
-                proto = str(proto_val)
-        else:
+        data = event.data or {}
+        # Determine protocol
+        proto_val = data.get('protocol')
+        proto = ''
+        try:
+            pv = int(proto_val)
+            proto = 'icmp' if pv == 1 else 'tcp' if pv == 6 else 'udp' if pv == 17 else str(pv)
+        except Exception:
             proto = str(proto_val).lower()
+        # ICMP detection
+        if proto == 'icmp':
+            itype = data.get('icmp_type')
+            for rule in self.rules:
+                if str(rule.get('protocol')).lower() == 'icmp':
+                    sid = rule['sid']
+                    opt = rule['options']
+                    if opt.get('itype') and int(opt.get('itype')) == itype:
+                        return Event('SNORT_ALERT', {'sid': sid, 'msg': rule.get('msg')})
+        # TCP threshold detection
+        if proto == 'tcp':
+            flags = data.get('tcp_flags', '')
+            for rule in self.rules:
+                if str(rule.get('protocol')).lower() == 'tcp' and 'S' in (rule['options'].get('flags') or ''):
+                    thr = rule['options'].get('threshold', '')
+                    # parse threshold
+                    parts = [p.strip() for p in thr.split(',')]
+                    cnt = next((int(p.split()[1]) for p in parts if p.startswith('count')), 1)
+                    sec = next((int(p.split()[1]) for p in parts if p.startswith('seconds')), 1)
+                    lst = getattr(self, '_tcp_times', {}).setdefault(rule['sid'], [])
+                    now = time.time()
+                    lst.append(now)
+                    # prune
+                    cutoff = now - sec
+                    lst[:] = [t for t in lst if t >= cutoff]
+                    setattr(self, '_tcp_times', getattr(self, '_tcp_times', {}))
+                    if len(lst) >= cnt:
+                        setattr(self, '_tcp_times', {})
+                        return Event('SNORT_ALERT', {'sid': rule['sid'], 'msg': rule.get('msg')})
+        return None
 
         src_ip = data.get('src_ip')
         dst_ip = data.get('dst_ip')
@@ -394,7 +397,7 @@ class SnortRulesPlugin(ModuleBase):
             if prio: info['priority'] = prio
             if ref: info['reference'] = ref
             # on match, include info
-            print(f"[DEBUG SNORT] matched rule sid={rule['sid']} proto={proto} src={src_ip} dst={dst_ip} itype={data.get('icmp_type')}", flush=True)
+            # print(f"[DEBUG SNORT] matched rule sid={rule['sid']} proto={proto} src={src_ip} dst={dst_ip} itype={data.get('icmp_type')}", flush=True)
             ev = Event('SNORT_ALERT', {
                 'sid': rule['sid'],
                 'msg': rule.get('msg'),
@@ -460,7 +463,7 @@ class SnortRulesPlugin(ModuleBase):
         try:
             mtime = os.path.getmtime(self.rules_path)
         except FileNotFoundError:
-            print(f"SnortRulesPlugin: nie znaleziono pliku reguł: {self.rules_path}", flush=True)
+            # print(f"SnortRulesPlugin: nie znaleziono pliku reguł: {self.rules_path}", flush=True)
             return
 
         old_mtime = getattr(self, 'rules_mtime', None)
@@ -492,7 +495,8 @@ class SnortRulesPlugin(ModuleBase):
                         'raw': r.raw or ''
                     })
             except Exception as e:
-                print(f"SnortRulesPlugin: błąd parsera snort-parser: {e}", flush=True)
+                # print(f"SnortRulesPlugin: błąd parsera snort-parser: {e}", flush=True)
+                pass
         else:
             # ręczne parsowanie (fallback)
             with open(self.rules_path, 'r', encoding='utf-8') as f:
@@ -567,17 +571,19 @@ class SnortRulesPlugin(ModuleBase):
                     })
 
         self.rules = new_rules
-        print(f"[DEBUG SNORT] _load_rules: loaded {len(self.rules)} rules from {self.rules_path}", flush=True)
+    # Debug print suppressed to avoid duplicate logs
+    # print(f"[DEBUG SNORT] _load_rules: loaded {len(self.rules)} rules from {self.rules_path}", flush=True)
         # debug: list all loaded rule SIDs
-        try:
-            sids = [rule.get('sid') for rule in self.rules]
-            print(f"[DEBUG SNORT] loaded rule SIDs: {sids}", flush=True)
-            if '2000001' in sids:
-                print("[DEBUG SNORT] ICMP test rule SID=2000001 is loaded", flush=True)
-            else:
-                print("[DEBUG SNORT] ICMP test rule SID=2000001 NOT loaded", flush=True)
-        except Exception:
-            pass
+    # Suppress listing all loaded SIDs for brevity
+    # try:
+    #     sids = [rule.get('sid') for rule in self.rules]
+    #     print(f"[DEBUG SNORT] loaded rule SIDs: {sids}", flush=True)
+    #     if '2000001' in sids:
+    #         print("[DEBUG SNORT] ICMP test rule SID=2000001 is loaded", flush=True)
+    #     else:
+    #         print("[DEBUG SNORT] ICMP test rule SID=2000001 NOT loaded", flush=True)
+    # except Exception:
+    #     pass
         # indeks reguł dla szybkiego filtrowania (protocol, dst_port, src_port)
         self.rule_index = {}
         for rule in self.rules:

@@ -1,0 +1,55 @@
+Oto szczegółowy plan działania krok po kroku, który poprowadzi Cię od obecnego stanu do responsywnej aplikacji opartej na pluginach i odciążonego GUI:
+
+Przygotowanie
+a) Utwórz gałąź „plugin-rewrite” w repozytorium, aby prace nie zniszczyły stabilnej wersji.
+b) Upewnij się, że masz aktualne kopie plików: modules/, qtui/, core/, plugins/ i plugins_config.yaml.
+
+Uporządkowanie konfiguracji
+a) W plugins_config.yaml opisz wszystkie planowane pluginy (Capture, Features, Detection, Optimizer, Devices, Scanner, SnortRules, Dashboard) i wyłącz stare moduły.
+b) W core/plugin_base.py masz już interfejs. W plugin_loader.py potwierdź, że loader odczytuje listę i instancjonuje klasy.
+
+Przechwytywanie pakietów w tle
+a) Zaimplementuj CaptureWorker w QThread (gotowe).
+b) W plugins/capture_plugin.py użyj tego worker’a i przeczyść stary capture.py (w projekcie pluginowym już nie będzie potrzebny).
+c) Przetestuj samodzielnie CapturePlugin.generate_event() → wrzuć w pętlę testową, czy faktycznie dostajesz Eventy.
+
+AI i reguły Snort w oddzielnych wątkach
+a) W DetectionPlugin.initialize() odłóż wczytanie modelu TensorFlow do worker’a (np. QThread lub ThreadPoolExecutor) – nie robić tego w inicjalizacji na głównym wątku.
+b) W snort_rules_plugin.py reguły można ładować w wątku watchdog (jest), ale dopasowania regexowe przenieś do ThreadPoolExecutor, jeśli są ciężkie.
+
+Refaktoring reszty modułów na pluginy
+a) FeaturesPlugin, OptimizerPlugin, DevicesPlugin, ScannerPlugin – upewnij się, że nie blokują głównego wątku (jeśli operacje długie, przenieś je do workerów).
+b) W pluginach w metodzie start() uruchamiaj oszczędny timer/QThread, który będzie wywoływał generate_event().
+
+Orchestrator i dystrybucja zdarzeń
+a) W orchestrator.py przywróć pętlę, która co 50–100 ms (lub przez QTimer) wywoła plugin.generate_event() dla każdego pluginu i przesyła Eventy do plugin.handle_event() wszystkich pozostałych pluginów.
+b) Oddziel tę pętlę od głównego wątku Qt – uruchom ją w osobnym wątku lub tasku ThreadPoolExecutor.
+
+Dashboard jako plugin UI
+a) W plugins/dashboard_plugin.py zamiast blokować app.exec_(), zarejestruj się na sygnały Eventów (np. poprzez Qt Signal/Slot), a start() wyłącznie pokaże główne okno.
+b) Usuwając wszelkie generate_event() i handle_event() w dashboard, obsługuj UI przez sloty wywoływane z Orchestratora.
+
+Start GUI jak najszybciej
+a) W main.py wywołuj od razu DashboardPlugin.start() (pokazanie okna i QTimer)
+b) Równolegle w tle orch.initialize_plugins() i orch.start_event_loop() (task w ThreadPoolExecutor).
+
+Testy integracyjne
+a) Upewnij się, że po uruchomieniu aplikacji Dashboard pojawia się w <500 ms.
+b) W tle bez blokowania UI wpadają pakiety i pojawiają się w tabeli.
+c) Weryfikuj logi: AI, SnortRules, Devices, Scanner – wszystkie Eventy przechodzą przez Orchestratora.
+
+Refaktoring i sprzątanie
+a) Po potwierdzeniu, że pluginy działają, usuń katalogi modules/ i qtui/.
+b) Zaktualizuj dokumentację (README.md, DEVELOPMENT.md) opisując nową architekturę.
+
+Optymalizacje końcowe
+a) Profilowanie per-packet: zmierz czas Snort regex, AI scoring, wstawienia do UI – tam gdzie jest najgorzej, dodaj batchowanie lub worker.
+b) Dostosuj interwały pollingów (np. rzadziej UI, częściej capture).
+c) Rozważ implementację hot-reload pluginów lub graficznego menedżera pluginów.
+
+Realizując te kroki, osiągniesz:
+
+niemal natychmiastowy start GUI,
+płynne przechwytywanie pakietów w tle,
+izolację ciężkich zadań w wątkach,
+łatwą rozbudowę o nowe pluginy bez zamieszania w kodzie głównym.

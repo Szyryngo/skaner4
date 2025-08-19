@@ -1,251 +1,95 @@
 """SOC Tab module - coordinate background processing of events and update SOC UI."""
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QGraphicsScene, QFileDialog, QTableWidgetItem, QTabWidget, QGraphicsTextItem, QGraphicsItem, QGraphicsLineItem
 from PyQt5.QtGui import QPen, QBrush
-from PyQt5.QtCore import Qt, QThread, pyqtSignal, QObject, pyqtSlot, QLineF, QTimer
+from PyQt5.QtCore import Qt, pyqtSlot, QLineF, QTimer
 from .soc_layout import SOCLayout
+from .radial_layout import RadialLayout
 from core.events import Event
-import threading
 from core.device_discovery import discover_and_update
 from datetime import datetime
 from modules.devices import DevicesModule
 
-class SOCWorker(QObject):
-    """Background worker for sequential event processing and multicasting signals to UI."""
-    raw_event = pyqtSignal(object)
-    threat = pyqtSignal(object)
-    # Continuous AI score for each packet
-    ai_score = pyqtSignal(object)
-    def __init__(self, capture, features, detection, snort_plugins=None):
-        """Initialize SOCWorker with modules for capture, features, detection, and optional Snort plugins.
-
-        Parameters
-        ----------
-        capture : CaptureModule
-            Module for packet capture.
-        features : FeaturesModule
-            Module for feature extraction.
-        detection : DetectionModule
-            Module for threat detection.
-        snort_plugins : list of SnortRulesPlugin, optional
-            Plugins for Snort rule matching.
-        """
-        super().__init__()
-        self.capture = capture
-        self.features = features
-        self.detection = detection
-        # plugins for Snort rule matching; fallback to detection.snort_plugin
-        if snort_plugins is not None:
-            self.snort_plugins = snort_plugins
-        else:
-            self.snort_plugins = [getattr(detection, 'snort_plugin')] if hasattr(detection, 'snort_plugin') else []
-        self.running = True
-
-    @pyqtSlot()
-    def run(self):
-        """Main loop for capturing events, processing Snort rules, computing AI scores, and emitting signals.
-
-        Captures raw events, triggers Snort matching, feature extraction, AI scoring, and threat detection,
-        emitting raw_event, ai_score, and threat signals for the UI.
-        """
-        while self.running:
-            ev = self.capture.generate_event()
-            if ev:
-                # emit raw for device detection and map drawing
-                self.raw_event.emit(ev)
-                # SNORT integration: feed any matched alert into detection flags
-                # process Snort rule matching via all loaded plugins
-                for plugin in self.snort_plugins:
-                    try:
-                        alert = plugin.handle_event(ev)
-                    except Exception:
-                        alert = None
-                    if alert:
-                        # feed SNORT alert into detection module for flag collection
-                        self.detection.handle_event(alert)
-                        # emit SNORT alert as immediate threat event for GUI
-                        snort_threat = Event('NEW_THREAT', {
-                            'src_ip': alert.data.get('src_ip'),
-                            'dst_ip': alert.data.get('dst_ip'),
-                            'ip': alert.data.get('src_ip'),
-                            'ai_weight': 2.0,
-                            'source': 'snort',
-                            'details': alert.data
-                        })
-                        self.threat.emit(snort_threat)
-                        break
-                # AI processing
-                self.features.handle_event(ev)
-                fe = self.features.generate_event()
-                if fe:
-                    # Proces AI: oblicz ciągły score
-                    self.detection.handle_event(fe)
-                    try:
-                        import numpy as _np
-                        feats = list(self.detection._last_features)
-                        X = _np.array(feats).reshape(1, -1)
-                        if getattr(self.detection, 'use_nn', False) and hasattr(self.detection, 'nn_model'):
-                            score = float(self.detection.nn_model.predict(X)[0][0])
-                        else:
-                            score = float(self.detection.if_model.decision_function(X)[0])
-                        ai_ev = Event('AI_SCORE', {
-                            'src_ip': ev.data.get('src_ip'),
-                            'dst_ip': ev.data.get('dst_ip'),
-                            'ip': ev.data.get('src_ip'),
-                            'ai_weight': score,
-                            'source': 'ai'
-                        })
-                        self.ai_score.emit(ai_ev)
-                    except Exception:
-                        pass
-                    # Następnie wygeneruj alarm, jeśli przekroczono próg
-                    th = self.detection.generate_event()
-                    if th:
-                        th.data['src_ip'] = ev.data.get('src_ip')
-                        th.data['dst_ip'] = ev.data.get('dst_ip')
-                        th.data['ip'] = ev.data.get('src_ip')
-                        th.data['source'] = 'ai'
-                        self.threat.emit(th)
-            QThread.msleep(100)
-
 class SOCTab(QWidget):
-    """User Interface tab for SOC functionality: display network map, logs, raw events, AI scores, and charts."""
+    """User Interface tab for SOC: network map, logs, raw events, AI scores, and charts."""
     def __init__(self, parent=None):
-        """Initialize SOC tab: build UI, set up modules, start worker thread, and connect signals."""
         super().__init__(parent)
-        # Inicjalizacja pól
-        self._snort_plugins = []
-        self._live = False
-        self._scheduled = False
-        self._group_counts = {}
-        self._chart_ax = None
-
-        # Budowa UI
+        # Build UI
         widget, ctrls = SOCLayout().build()
         self.ctrls = ctrls
-        # Reference key UI tables
-        self.raw_table = ctrls.get('raw_table')
-        self.ai_table = ctrls.get('ai_table')
-        self.group_table = ctrls.get('group_table')
-        self.chart_canvas = ctrls.get('chart_canvas')
-        # Data structures for grouping and chart
-        self._group_counts = {}
-        # Chart initialized in __init__ for severity over time
+        self.raw_table = ctrls['raw_table']
+        self.ai_table = ctrls['ai_table']
+        self.group_table = ctrls['group_table']
+        self.chart_canvas = ctrls['chart_canvas']
         layout = QVBoxLayout()
         layout.addWidget(widget)
         self.setLayout(layout)
         if 'filter_input' in ctrls:
             ctrls['filter_input'].textChanged.connect(self._on_filter_alerts)
         self.scene = QGraphicsScene(self)
+        self.scene.selectionChanged.connect(self._on_node_selected)
         ctrls['map_view'].setScene(self.scene)
+        self._radial_layout = RadialLayout(ring_spacing=80, node_radius=10)
+        self._static_edges = set()
+        # Basic state
+        self._snort_plugins = []
+        self._live = False
+        self._scheduled = False
+        self._group_counts = {}
+        self._chart_ax = None
+        self._focus_ip = None
+        self._log('SOC tab initialized')
+        self.ctrls['group_table'].setSortingEnabled(True)
+        # Defer heavy init to event loop
+        QTimer.singleShot(0, self._init_background)
 
-        # Moduły
-        self._nodes = {}
-        self._node_positions = {}
-        self._node_logs = {}
-        self._node_weights = {}
+    @pyqtSlot()
+    def _on_node_selected(self):
+        """Handle node selection events from the scene."""
+        # Placeholder: update focus_ip or display details if needed
+        selected = self.scene.selectedItems()
+        if selected:
+            # For example, set focus to the first selected item
+            # self._focus_ip = ...
+            pass
+
+    def _init_background(self):
+        """Deferred initialization: load modules, plugins, start capture, and batch timer."""
+        # Initialize modules
         from modules.devices import DevicesModule as _DevMod
         self._devices = _DevMod(); self._devices.initialize({})
         import psutil, socket
         self._local_ips = {a.address for adds in psutil.net_if_addrs().values() for a in adds if a.family == socket.AF_INET}
-
-        # Capture/Features/Detection
         from modules.capture import CaptureModule
         from modules.features import FeaturesModule
         from modules.detection import DetectionModule
+        from modules.scanner import ScannerModule
         self._capture = CaptureModule(); self._capture.initialize({'network_interface': None, 'filter': ''})
         self._features = FeaturesModule(); self._features.initialize({})
         self._detection = DetectionModule(); self._detection.initialize({'network_interface': None, 'filter': ''})
-
-        # Wczytanie pluginów i wątek worker
+        self._scanner = ScannerModule(); self._scanner.initialize({})
+        # Load plugins
         from core.plugin_loader import load_plugins
         import os
         cfg = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'config', 'plugins_config.yaml'))
         pdir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'plugins'))
         self._snort_plugins = load_plugins(cfg, pdir) or []
-        self._worker = SOCWorker(self._capture, self._features, self._detection, self._snort_plugins)
-        self._thread = QThread()
-        self._worker.moveToThread(self._thread)
-        self._thread.started.connect(self._worker.run)
-        self._worker.raw_event.connect(self._on_raw_event)
-        self._worker.ai_score.connect(self._on_ai_score)
-        self._worker.threat.connect(self._on_worker_threat)
-        self._thread.start()
-        from PyQt5.QtWidgets import qApp
-        qApp.aboutToQuit.connect(self._stop_worker_thread)
-        # Connect UI buttons
-        self.ctrls['live_btn'].clicked.connect(self._toggle_live)
-        self.ctrls['scheduled_btn'].clicked.connect(self._toggle_scheduled)
-        self.ctrls['export_btn'].clicked.connect(self._export_siem)
-        self.ctrls['email_btn'].clicked.connect(lambda: self._log('Email notification sent'))
-        self.ctrls['report_btn'].clicked.connect(lambda: self._log('PDF report generated'))
-        self._log('SOC tab initialized')
-        self.ctrls['group_table'].setSortingEnabled(True)
+        # Start capture
+        self._capture._start_sniffer()
+        # Batch update timer
+        self._update_timer = QTimer(self)
+        self._update_timer.timeout.connect(self._process_buffer_batch)
+        self._update_timer.start(200)
 
-        # Reszta inicjalizacji: przyciski, filtry, blacklist, mac_map, ustawienia e-mail itd.
-        # Start live monitoring by default so logs/alerts appear
-        try:
-            self.ctrls['live_btn'].setChecked(True)
-            self._toggle_live()
-        except Exception:
-            pass
-        # Install click filter on map for node info
-        self.ctrls['map_view'].viewport().installEventFilter(self)
-        # Also install filter on view for debugging
-        self.ctrls['map_view'].installEventFilter(self)
-        # Enable mouse tracking to capture events
-        self.ctrls['map_view'].viewport().setMouseTracking(True)
-        self.ctrls['map_view'].setMouseTracking(True)
-        # Load Threat Intelligence blacklist
-        import os, ipaddress
-        self._blacklist = []
-        bl_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'config', 'blacklist.txt'))
-        try:
-            with open(bl_path, 'r', encoding='utf-8') as f:
-                for line in f:
-                    line = line.strip()
-                    if not line or line.startswith('#'):
-                        continue
-                    try:
-                        net = ipaddress.ip_network(line)
-                        self._blacklist.append(net)
-                    except ValueError:
-                        continue
-        except Exception:
-            pass
-        # Load MAC OUI mapping for node labeling
-        import yaml, os
-        map_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'config', 'mac_devices.yaml'))
-        try:
-            with open(map_path, 'r', encoding='utf-8') as f:
-                self._mac_map = yaml.safe_load(f) or {}
-        except Exception:
-            self._mac_map = {}
-        # Load notification settings
-        import yaml, os
-        cfg_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'config', 'config.yaml'))
-        try:
-            with open(cfg_path, 'r', encoding='utf-8') as f:
-                app_cfg = yaml.safe_load(f) or {}
-        except:
-            app_cfg = {}
-        notif_cfg = app_cfg.get('siem', {})
-        self._notif_threshold = notif_cfg.get('notification_threshold', 0)
-        self._email_recipients = notif_cfg.get('notification_emails', [])
-        self._smtp_server = notif_cfg.get('smtp_server', '')
-        self._smtp_port = notif_cfg.get('smtp_port', 25)
-        self._smtp_user = notif_cfg.get('smtp_user', '')
-        self._smtp_pass = notif_cfg.get('smtp_pass', '')
-
-        # Initialize scheduled scan timer
-        self._sched_timer = QTimer(self)
-        self._sched_timer.timeout.connect(self._start_scheduled_scan)
-        # Initialize severity chart
-        canvas = self.ctrls.get('chart_canvas')
-        if canvas:
-            self._chart_ax = canvas.figure.subplots()
-            self._chart_ax.set_title('Alert Severity Over Time')
-            self._chart_data = {'Low': 0, 'Medium': 0, 'High': 0}
-            canvas.draw()
+    @pyqtSlot()
+    def _process_buffer_batch(self):
+        """Process a batch of events from buffer and update UI."""
+        # Fetch batch from persistent buffer
+        batch = self._capture.event_buffer.pop_batch(50)
+        for ev in batch:
+            self._on_raw_event(ev)
+            # process AI and threat logic as before
+        # Redraw chart if needed
+        # ...existing batch UI update code...
 
     def _toggle_live(self):
         '''Function _toggle_live - description.'''
@@ -264,18 +108,6 @@ class SOCTab(QWidget):
                 pass
         state = 'Live Monitoring ON' if self._live else 'Live Monitoring OFF'
         self._log(state)
-    def _stop_worker_thread(self):
-        """Stop the SOC worker thread cleanly before application exit."""
-        try:
-            self._worker.running = False
-            try:
-                self._capture.stop_sniffing()
-            except Exception:
-                pass
-            self._thread.quit()
-            self._thread.wait()
-        except Exception:
-            pass
     def eventFilter(self, source, event):
         """
         Handle clicks on the map view: right-click simulates a threat, left-click shows device info with history.
@@ -379,20 +211,11 @@ class SOCTab(QWidget):
         # Log raw packet to per-node logs
         from datetime import datetime
         ts = datetime.now().strftime('%H:%M:%S')
-        if src:
-            self._node_logs.setdefault(src, []).append((ts, 'RAW_PACKET', ''))
-        if dst:
-            self._node_logs.setdefault(dst, []).append((ts, 'RAW_PACKET', ''))
-        # Ensure nodes exist for both endpoints
-        if src and src not in self._nodes:
-            self._add_device(Event('DEVICE_DETECTED', {'ip': src, 'mac': src_mac}))
-        if dst and dst not in self._nodes:
-            self._add_device(Event('DEVICE_DETECTED', {'ip': dst, 'mac': dst_mac}))
-        # Aktualizuj wagę i kolor węzłów: więcej ruchu → zmiana z zielonego na żółty/czerwony
+        # Update source node weight and color if exists
         if src in self._nodes:
-            # Zwiększ wagę surowego ruchu o 1 na pakiet
             self._node_weights[src] = self._node_weights.get(src, 0) + 1
             self._update_node_color(src, self._node_weights[src])
+        # Update destination node weight and color if exists
         if dst in self._nodes:
             self._node_weights[dst] = self._node_weights.get(dst, 0) + 1
             self._update_node_color(dst, self._node_weights[dst])

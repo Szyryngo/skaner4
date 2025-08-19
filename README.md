@@ -1,5 +1,8 @@
 # AI Network Packet Analyzer Pro
 
+## Wersja
+- Obecna wersja: **1.7.0-alpha**
+
 ## 📦 Repozytorium GitHub
 [![Build Status](https://github.com/Szyryngo/skaner4/actions/workflows/python-app.yml/badge.svg)](https://github.com/Szyryngo/skaner4/actions)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)

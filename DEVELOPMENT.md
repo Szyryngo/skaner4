@@ -12,6 +12,12 @@ Zawiera opis wszystkich modułów i kroków, jakie trzeba wykonać.
 - Moduły implementują `ModuleBase` z `core/interfaces.py`
 - Eventy przesyłane pomiędzy modułami przez orchestrator
 - Pluginy ładowane dynamicznie z `/plugins` wg pliku `config/plugins_config.yaml`
++  
++- **Pełna migracja silnika do systemu pluginów**:
++  - Każdy kluczowy komponent (Capture, Features, Detection, Devices, Scanner, Optimizer) został przepisany jako osobny plugin implementujący `ModuleBase`.
++  - Pluginy są teraz ładowane i konfigurowane przez `core/plugin_loader.py`, co eliminuje bezpośrednie zależności między modułami.
++  - Dodano mechanizm `event_buffer` w CaptureModule, aby pluginy mogły batchowo odczytywać nowe zdarzenia.
++  - Wprowadzono dynamiczne włączanie/wyłączanie pluginów w czasie działania aplikacji poprzez `plugins_config.yaml`.
 
 ---
 
